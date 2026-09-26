@@ -65,6 +65,10 @@ _Avoid_: Event rule, workflow trigger, routing rule
 **Enterprise Integration**:
 A managed connection to an external enterprise application (EAM, PLM, ERP, FSM, AIP) providing authentication, rate limiting, and an MCP tool interface.
 _Avoid_: Plugin, connector, webhook, adapter
+**Enterprise MCP Adapter**:
+A dedicated microservice or sidecar translating heterogeneous vendor protocols (OData, SOAP, OPC-UA, RFC) into standardized Model Context Protocol (MCP) JSON-RPC interfaces.
+_Avoid_: ESB connector, protocol bridge, webhook forwarder
+
 
 **Compensating Action**:
 An idempotent operational transaction executed by a Temporal workflow to undo previously committed external side-effects when a downstream step in a Saga fails.
