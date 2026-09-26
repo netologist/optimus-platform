@@ -1,0 +1,31 @@
+{
+  "asset_id": "P-104",
+  "tenant_id": "acme",
+  "name": "Centrifugal Cooling Pump P-104",
+  "plant": "Manchester",
+  "type": "Centrifugal Pump",
+  "status": "OPERATIONAL",
+  "criticality": "HIGH",
+  "maintenance_history": [
+    {
+      "date": "2026-08-30",
+      "event": "overheating",
+      "resolved": true
+    },
+    {
+      "date": "2026-09-06",
+      "event": "overheating",
+      "resolved": true
+    },
+    {
+      "date": "2026-09-14",
+      "event": "overheating",
+      "resolved": true
+    },
+    {
+      "date": "2026-09-22",
+      "event": "overheating",
+      "resolved": false
+    }
+  ]
+}

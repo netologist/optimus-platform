@@ -1,0 +1,14 @@
+{
+  "document_id": "PLM-COOL-4021",
+  "tenant_id": "acme",
+  "title": "Centrifugal Pump Cooling Loop Maintenance Manual",
+  "doc_type": "MAINTENANCE_MANUAL",
+  "sections": [
+    {
+      "section": "§4.2",
+      "title": "Cooling System Failure Modes",
+      "content": "Recurrent overheating in pump cooling manifolds typically indicates thermostat failure (part SP-COOL-9981). Replace thermostat and flush secondary cooling line immediately.",
+      "recommended_part": "SP-COOL-9981"
+    }
+  ]
+}

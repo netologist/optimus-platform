@@ -1,0 +1,77 @@
+apiVersion: platform.optimus.dev/v1alpha1
+kind: EnterpriseIntegration
+metadata:
+  name: acme-eam
+  namespace: optimus
+  labels:
+    platform.optimus.dev/tenant: acme
+    platform.optimus.dev/system: eam
+spec:
+  tenant: acme
+  systemType: eam
+  port: 8080
+  capabilities:
+    - eam.get_asset
+    - eam.get_maintenance_history
+---
+apiVersion: platform.optimus.dev/v1alpha1
+kind: EnterpriseIntegration
+metadata:
+  name: acme-plm
+  namespace: optimus
+  labels:
+    platform.optimus.dev/tenant: acme
+    platform.optimus.dev/system: plm
+spec:
+  tenant: acme
+  systemType: plm
+  port: 8080
+  capabilities:
+    - plm.search_documents
+---
+apiVersion: platform.optimus.dev/v1alpha1
+kind: EnterpriseIntegration
+metadata:
+  name: acme-erp
+  namespace: optimus
+  labels:
+    platform.optimus.dev/tenant: acme
+    platform.optimus.dev/system: erp
+spec:
+  tenant: acme
+  systemType: erp
+  port: 8080
+  capabilities:
+    - erp.get_inventory
+    - erp.reserve_inventory
+    - erp.release_inventory_reservation
+---
+apiVersion: platform.optimus.dev/v1alpha1
+kind: EnterpriseIntegration
+metadata:
+  name: acme-fsm
+  namespace: optimus
+  labels:
+    platform.optimus.dev/tenant: acme
+    platform.optimus.dev/system: fsm
+spec:
+  tenant: acme
+  systemType: fsm
+  port: 8080
+  capabilities:
+    - fsm.create_work_order
+---
+apiVersion: platform.optimus.dev/v1alpha1
+kind: EnterpriseIntegration
+metadata:
+  name: acme-oi
+  namespace: optimus
+  labels:
+    platform.optimus.dev/tenant: acme
+    platform.optimus.dev/system: oi
+spec:
+  tenant: acme
+  systemType: oi
+  port: 8080
+  capabilities:
+    - oi.get_recent_events

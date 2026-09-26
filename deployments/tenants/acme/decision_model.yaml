@@ -1,0 +1,14 @@
+apiVersion: platform.optimus.dev/v1alpha1
+kind: DecisionModel
+metadata:
+  name: laya-default
+  namespace: optimus
+  labels:
+    platform.optimus.dev/tenant: acme
+spec:
+  ollayaRef:
+    service: ollaya
+    port: 11435
+  model: "laya"
+  keepAlive: "-1"
+  precision: "fp32"

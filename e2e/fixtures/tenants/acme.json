@@ -1,0 +1,10 @@
+{
+  "tenant_id": "acme",
+  "name": "Acme Industrial Manufacturing Ltd.",
+  "plants": [
+    "Manchester",
+    "Munich",
+    "Chicago"
+  ],
+  "created_at": "2026-01-15T08:00:00Z"
+}
