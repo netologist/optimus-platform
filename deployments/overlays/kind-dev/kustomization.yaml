@@ -4,9 +4,17 @@ kind: Kustomization
 namespace: optimus
 
 resources:
+  # Infrastructure Dependencies
   - ../../base/postgres
   - ../../base/redpanda
   - ../../base/temporal
   - ../../base/kong
   - ../../base/ollaya
   - ../../base/observability
+
+  # Application Services
+  - ../../base/platform
+  - ../../base/decision-service
+  - ../../base/integration-mocks
+  - ../../base/ai-runtime
+  - ../../base/operator
