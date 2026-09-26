@@ -102,9 +102,12 @@ run = "cd e2e && go test -v -tags=e2e ./scenarios/... -timeout 20m"
 description = "Run E2E test against live cluster using port-forwards"
 run = "./scripts/test-e2e-live.sh"
 [tasks.demo]
-description = "Run the interactive maintenance CLI demo"
+description = "Run the interactive live cluster demo against real endpoints"
 run = "./scripts/demo.sh"
 
+[tasks."demo:mock"]
+description = "Run the offline simulation demo (no cluster needed)"
+run = "./scripts/demo-mock.sh"
 [tasks.clean]
 description = "Cleanup local dev environment"
 run = "./scripts/cleanup.sh"
