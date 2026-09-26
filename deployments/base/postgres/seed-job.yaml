@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: optimus-db-seeds
+  namespace: optimus
+data:
+  01-seed-data.sql: |
+    -- 1. Tenant Acme
+    INSERT INTO tenants (id, name)
+    VALUES ('acme', 'Acme Industrial Manufacturing Ltd.')
+    ON CONFLICT (id) DO NOTHING;
+
+    -- 2. Asset P-104
+    INSERT INTO assets (id, tenant_id, name, asset_type, plant, status)
+    VALUES ('P-104', 'acme', 'Centrifugal Cooling Pump P-104', 'Centrifugal Pump', 'Manchester', 'OPERATIONAL')
+    ON CONFLICT (tenant_id, id) DO UPDATE SET status = 'OPERATIONAL';
+
+    -- 3. Document PLM-COOL-4021
+    INSERT INTO documents (id, tenant_id, title, doc_type)
+    VALUES ('PLM-COOL-4021', 'acme', 'Centrifugal Pump Cooling Loop Maintenance Manual', 'MAINTENANCE_MANUAL')
+    ON CONFLICT (tenant_id, id) DO NOTHING;
+
+    -- 4. Document Chunks
+    INSERT INTO document_chunks (tenant_id, document_id, chunk_index, content)
+    VALUES (
+        'acme',
+        'PLM-COOL-4021',
+        1,
+        'Recurrent overheating in pump cooling manifolds typically indicates thermostat failure (part SP-COOL-9981). Replace thermostat and flush secondary cooling line immediately.'
+    )
+    ON CONFLICT DO NOTHING;
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: optimus-db-seed
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: db-seed
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: db-seed
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-migrations
+          image: pgvector/pgvector:pg17
+          env:
+            - name: PGPASSWORD
+              value: "optimus_secret"
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until psql -h postgres.optimus.svc -U optimus -d optimus -c "SELECT 1 FROM tenants LIMIT 1;" >/dev/null 2>&1; do
+                echo "Waiting for migrations to complete (tenants table ready)..."
+                sleep 2
+              done
+              echo "Migrations verified! Ready to seed fixtures."
+      containers:
+        - name: run-seed
+          image: pgvector/pgvector:pg17
+          env:
+            - name: PGPASSWORD
+              value: "optimus_secret"
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "==> Seeding operational fixtures..."
+              psql -h postgres.optimus.svc -U optimus -d optimus -f /seeds/01-seed-data.sql
+              echo "==> Seeding complete!"
+          volumeMounts:
+            - name: seeds-volume
+              mountPath: /seeds
+      volumes:
+        - name: seeds-volume
+          configMap:
+            name: optimus-db-seeds

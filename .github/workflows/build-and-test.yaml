@@ -160,10 +160,10 @@ jobs:
       - name: Wait for PostgreSQL rollout
         run: kubectl rollout status deployment/postgres -n optimus --timeout=90s
 
-      - name: Run Database Migrations
+      - name: Wait for DB Migration Kubernetes Job (optimus-db-migrate)
         run: ./scripts/migrate.sh
 
-      - name: Seed Operational Fixtures (Tenant Acme, Asset P-104)
+      - name: Wait for DB Seed Kubernetes Job (optimus-db-seed)
         run: ./scripts/seed.sh
 
       - name: Wait for remaining deployments rollout

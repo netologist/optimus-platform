@@ -1,0 +1,186 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: optimus-db-migrations
+  namespace: optimus
+data:
+  01-platform-schema.sql: |
+    CREATE EXTENSION IF NOT EXISTS vector;
+
+    CREATE TABLE IF NOT EXISTS tenants (
+        id VARCHAR(64) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS assets (
+        id VARCHAR(64) NOT NULL,
+        tenant_id VARCHAR(64) NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        asset_type VARCHAR(128) NOT NULL,
+        plant VARCHAR(128) NOT NULL,
+        status VARCHAR(64) NOT NULL DEFAULT 'OPERATIONAL',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (tenant_id, id)
+    );
+
+    CREATE TABLE IF NOT EXISTS signals (
+        id VARCHAR(64) NOT NULL,
+        tenant_id VARCHAR(64) NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        asset_id VARCHAR(64) NOT NULL,
+        symptom TEXT NOT NULL,
+        status VARCHAR(64) NOT NULL DEFAULT 'INGESTED',
+        workflow_id VARCHAR(128),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (tenant_id, id)
+    );
+
+    CREATE TABLE IF NOT EXISTS work_orders (
+        id VARCHAR(64) NOT NULL,
+        tenant_id VARCHAR(64) NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        asset_id VARCHAR(64) NOT NULL,
+        priority VARCHAR(32) NOT NULL,
+        status VARCHAR(64) NOT NULL DEFAULT 'OPEN',
+        idempotency_key VARCHAR(128) NOT NULL UNIQUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (tenant_id, id)
+    );
+
+    CREATE TABLE IF NOT EXISTS outbox (
+        id BIGSERIAL PRIMARY KEY,
+        tenant_id VARCHAR(64) NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        event_type VARCHAR(128) NOT NULL,
+        correlation_id VARCHAR(128) NOT NULL,
+        traceparent VARCHAR(255),
+        payload JSONB NOT NULL,
+        published_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_outbox_unpublished ON outbox (created_at) WHERE published_at IS NULL;
+
+    CREATE TABLE IF NOT EXISTS documents (
+        id VARCHAR(64) NOT NULL,
+        tenant_id VARCHAR(64) NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        title VARCHAR(255) NOT NULL,
+        doc_type VARCHAR(64) NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (tenant_id, id)
+    );
+
+    CREATE TABLE IF NOT EXISTS document_chunks (
+        id BIGSERIAL PRIMARY KEY,
+        tenant_id VARCHAR(64) NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        document_id VARCHAR(64) NOT NULL,
+        chunk_index INT NOT NULL,
+        content TEXT NOT NULL,
+        tsv TSVECTOR GENERATED ALWAYS AS (to_tsvector('english', content)) STORED,
+        embedding vector(384),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_chunks_tsv ON document_chunks USING GIN(tsv);
+    CREATE INDEX IF NOT EXISTS idx_chunks_embedding ON document_chunks USING hnsw (embedding vector_cosine_ops);
+
+    -- Row-Level Security Policies
+    ALTER TABLE assets ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE signals ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE work_orders ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE outbox ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE document_chunks ENABLE ROW LEVEL SECURITY;
+
+    DROP POLICY IF EXISTS assets_tenant_isolation ON assets;
+    CREATE POLICY assets_tenant_isolation ON assets
+        USING (tenant_id = NULLIF(current_setting('app.current_tenant', true), ''));
+
+    DROP POLICY IF EXISTS signals_tenant_isolation ON signals;
+    CREATE POLICY signals_tenant_isolation ON signals
+        USING (tenant_id = NULLIF(current_setting('app.current_tenant', true), ''));
+
+    DROP POLICY IF EXISTS work_orders_tenant_isolation ON work_orders;
+    CREATE POLICY work_orders_tenant_isolation ON work_orders
+        USING (tenant_id = NULLIF(current_setting('app.current_tenant', true), ''));
+
+    DROP POLICY IF EXISTS outbox_tenant_isolation ON outbox;
+    CREATE POLICY outbox_tenant_isolation ON outbox
+        USING (tenant_id = NULLIF(current_setting('app.current_tenant', true), ''));
+
+    DROP POLICY IF EXISTS documents_tenant_isolation ON documents;
+    CREATE POLICY documents_tenant_isolation ON documents
+        USING (tenant_id = NULLIF(current_setting('app.current_tenant', true), ''));
+
+    DROP POLICY IF EXISTS document_chunks_tenant_isolation ON document_chunks;
+    CREATE POLICY document_chunks_tenant_isolation ON document_chunks
+        USING (tenant_id = NULLIF(current_setting('app.current_tenant', true), ''));
+
+  02-decision-audit.sql: |
+    CREATE TABLE IF NOT EXISTS decision_audit (
+        id BIGSERIAL PRIMARY KEY,
+        tenant_id VARCHAR(64) NOT NULL,
+        decision_id VARCHAR(128) NOT NULL UNIQUE,
+        asset_id VARCHAR(64) NOT NULL,
+        model VARCHAR(64) NOT NULL,
+        state_payload JSONB NOT NULL,
+        raw_response JSONB NOT NULL,
+        governed_decision JSONB NOT NULL,
+        policy_version VARCHAR(32) NOT NULL,
+        requires_approval BOOLEAN NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_decision_audit_tenant_asset 
+        ON decision_audit (tenant_id, asset_id, created_at DESC);
+
+    ALTER TABLE decision_audit ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS decision_audit_tenant_isolation ON decision_audit;
+    CREATE POLICY decision_audit_tenant_isolation ON decision_audit
+        USING (tenant_id = NULLIF(current_setting('app.current_tenant', true), ''));
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: optimus-db-migrate
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: db-migrate
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: db-migrate
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-postgres
+          image: pgvector/pgvector:pg17
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until pg_isready -h postgres.optimus.svc -p 5432 -U optimus; do
+                echo "Waiting for postgres.optimus.svc:5432 to become ready..."
+                sleep 2
+              done
+              echo "PostgreSQL is reachable!"
+      containers:
+        - name: run-migrations
+          image: pgvector/pgvector:pg17
+          env:
+            - name: PGPASSWORD
+              value: "optimus_secret"
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "==> Running Platform Schema Migration..."
+              psql -h postgres.optimus.svc -U optimus -d optimus -f /migrations/01-platform-schema.sql
+              echo "==> Running Decision Audit Migration..."
+              psql -h postgres.optimus.svc -U optimus -d optimus -f /migrations/02-decision-audit.sql
+              echo "==> Migrations complete!"
+          volumeMounts:
+            - name: migrations-volume
+              mountPath: /migrations
+      volumes:
+        - name: migrations-volume
+          configMap:
+            name: optimus-db-migrations

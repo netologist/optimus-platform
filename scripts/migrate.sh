@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Execute database migrations for platform and decision-service
+# Wait for or trigger the Kubernetes DB migration Job
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 KUBECONFIG_PATH="${ROOT_DIR}/.kube/kind-optimus.yaml"
@@ -10,16 +10,16 @@ if [ -f "${KUBECONFIG_PATH}" ]; then
   export KUBECONFIG="${KUBECONFIG_PATH}"
 fi
 
-echo "==> Running PostgreSQL schema migrations on cluster..."
+echo "==> Tracking Kubernetes DB migration Job (optimus-db-migrate)..."
 
-# 1. Platform Schema & Row-Level Security (apply Up section only)
-echo "  [1/2] Applying platform schema (vector, tenants, assets, signals, work_orders, outbox, documents)..."
-sed '/-- +goose Down/,$d' "${ROOT_DIR}/projects/platform/db/migrations/00001_init_schema.sql" | \
-  kubectl exec -i -n optimus deploy/postgres -- psql -U optimus -d optimus
-
-# 2. Decision Audit Schema (apply Up section only)
-echo "  [2/2] Applying decision audit schema..."
-sed '/-- +goose Down/,$d' "${ROOT_DIR}/projects/decision-service/db/migrations/00001_init_decision_audit.sql" | \
-  kubectl exec -i -n optimus deploy/postgres -- psql -U optimus -d optimus
-
-echo "==> Database migrations applied successfully!"
+# If job already completed, report success; otherwise wait
+if kubectl get job/optimus-db-migrate -n optimus >/dev/null 2>&1; then
+  echo "    Waiting for condition=complete on job/optimus-db-migrate..."
+  kubectl wait --for=condition=complete job/optimus-db-migrate -n optimus --timeout=60s
+  echo "==> Kubernetes DB migration Job completed successfully!"
+else
+  echo "    Job not found. Applying migration job manifest..."
+  kubectl apply -f "${ROOT_DIR}/deployments/base/postgres/migration-job.yaml"
+  kubectl wait --for=condition=complete job/optimus-db-migrate -n optimus --timeout=60s
+  echo "==> Kubernetes DB migration Job completed successfully!"
+fi
