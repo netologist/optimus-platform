@@ -74,7 +74,7 @@ func (c *Client) Decide(ctx context.Context, req Request) (*Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("systemone request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)

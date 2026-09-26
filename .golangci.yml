@@ -1,27 +1,31 @@
-run:
-  timeout: 5m
-  tests: true
+version: "2"
 
 linters:
   enable:
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
     - unused
     - revive
+  settings:
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+  exclusions:
+    generated: lax
+    paths:
+      - vendor
+      - bin
+
+formatters:
+  enable:
     - gofmt
-
-linters-settings:
-  revive:
-    rules:
-      - name: exported
-        disabled: true
-      - name: package-comments
-        disabled: true
-
-issues:
-  exclude-dirs:
-    - vendor
-    - bin
+  exclusions:
+    generated: lax
+    paths:
+      - vendor
+      - bin

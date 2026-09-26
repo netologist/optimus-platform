@@ -17,7 +17,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26"
+          go-version: "1.26.8"
           cache: true
 
       - name: Set up Python
@@ -31,10 +31,16 @@ jobs:
           version: "latest"
 
       - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-          args: --timeout=5m
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
+            | sh -s -- -b $(go env GOPATH)/bin v2.14.0
+
+      - name: Run Go Lint
+        run: |
+          for p in platform decision-service integration-mocks operator; do
+            echo "==> Linting projects/$p..."
+            (cd projects/$p && golangci-lint run ./... --timeout=5m) || exit 1
+          done
 
       - name: Run Go Unit Tests
         run: |

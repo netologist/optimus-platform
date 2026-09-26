@@ -39,7 +39,7 @@ func (r *EnterpriseKnowledgeSourceReconciler) Reconcile(ctx context.Context, req
 	tr := otel.Tracer("optimus-operator")
 	ctx, span := tr.Start(ctx, "ReconcileKnowledgeSource",
 		trace.WithAttributes(
-			attribute.String("k8s.resource", req.NamespacedName.String()),
+			attribute.String("k8s.resource", req.String()),
 		),
 	)
 	defer span.End()

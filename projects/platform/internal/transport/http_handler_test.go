@@ -85,7 +85,7 @@ func TestPlatformHTTPRoutes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to create temp file: %v", err)
 		}
-		defer os.Remove(tempFile.Name())
+		defer func() { _ = os.Remove(tempFile.Name()) }()
 
 		customJSON := `{"openapi":"3.0.3","info":{"title":"Custom Override API","version":"2.0.0"}}`
 		if _, err := tempFile.WriteString(customJSON); err != nil {

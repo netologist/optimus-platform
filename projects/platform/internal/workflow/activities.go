@@ -70,7 +70,7 @@ func (a *Activities) InvestigateFailure(ctx context.Context, input AssetFailureW
 			},
 		}, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var evidence EvidenceContext
 	if err := json.NewDecoder(resp.Body).Decode(&evidence); err != nil {
@@ -108,7 +108,7 @@ func (a *Activities) RunDecision(ctx context.Context, evidence *EvidenceContext)
 			PolicyVersion:      "policy_v1",
 		}, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var gd GovernedDecision
 	if err := json.NewDecoder(resp.Body).Decode(&gd); err != nil {
@@ -148,7 +148,7 @@ func (a *Activities) ReserveSparePart(ctx context.Context, tenantID, partID, ide
 			PartID:        partID,
 		}, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var rpcResp struct {
 		Result struct {
@@ -223,7 +223,7 @@ func (a *Activities) CreateFieldWorkOrder(ctx context.Context, tenantID, assetID
 			Priority:    priority,
 		}, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var rpcResp struct {
 		Result struct {
