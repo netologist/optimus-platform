@@ -9,6 +9,7 @@ from pydantic_ai.models import Model
 
 from ..llm.provider import LLMProvider, get_model, get_provider
 from ..mcp.client import MCPClient
+from ..orchestration.orchestrator import InvestigationOrchestrator
 from ..rag.retriever import HybridRetriever
 from .specialists import EAMSpecialist, ERPSpecialist, PLMSpecialist
 
@@ -48,9 +49,16 @@ class PlannerAgent:
         llm_provider: LLMProvider | None = None,
         model: Model | None = None,
         retriever: HybridRetriever | None = None,
+        orchestrator: InvestigationOrchestrator | None = None,
     ):
         self.mcp_client = mcp_client or MCPClient()
         self.retriever = retriever or HybridRetriever()
+
+        # Orchestration layer coordinating multi-agent steps (PRD §18.4 / ADR-013)
+        self.orchestrator = orchestrator or InvestigationOrchestrator(
+            mcp_client=self.mcp_client,
+            retriever=self.retriever,
+        )
 
         # Resolve Pydantic AI model
         if model is not None:
@@ -58,7 +66,7 @@ class PlannerAgent:
         else:
             self.model = get_model()
 
-        # Legacy / text provider fallback if specified
+        # Text provider fallback if specified
         self.llm = llm_provider or get_provider()
 
         # Initialize Pydantic AI Agent
@@ -112,62 +120,21 @@ class PlannerAgent:
     ) -> EvidenceContext:
         evidence = EvidenceContext(asset_id=asset_id, tenant_id=tenant_id)
 
-        # 1. Discover active tools
-        tools = await self.mcp_client.discover_tools(tenant_id)
-        endpoint_map = {t["name"]: t.get("endpoint", "http://127.0.0.1:8080") for t in tools}
-        default_ep = endpoint_map.get("eam.get_maintenance_history", "http://127.0.0.1:8080")
+        # 1. Execute Multi-Agent Investigation via Orchestrator
+        inv_data = await self.orchestrator.execute_investigation(
+            tenant_id=tenant_id,
+            asset_id=asset_id,
+            symptom=symptom,
+        )
 
-        # 2. Query EAM Maintenance History
-        eam = EAMSpecialist(self.mcp_client, default_ep)
-        try:
-            hist = await eam.get_history(tenant_id, asset_id)
-            evidence.failures_last_30_days = hist.get("failures_last_30_days", 4)
-            if "eam.get_maintenance_history" not in evidence.tool_calls:
-                evidence.tool_calls.append("eam.get_maintenance_history")
-        except Exception:
-            evidence.failures_last_30_days = 4
-            if "eam.get_maintenance_history" not in evidence.tool_calls:
-                evidence.tool_calls.append("eam.get_maintenance_history")
+        evidence.failures_last_30_days = inv_data["failures_last_30_days"]
+        evidence.plm_findings = inv_data["plm_findings"]
+        evidence.spare_part_id = inv_data["spare_part_id"]
+        evidence.spare_part_in_stock = inv_data["spare_part_in_stock"]
+        evidence.tool_calls = inv_data["tool_calls"]
+        endpoint_map = inv_data.get("endpoint_map", {})
 
-        # 3. Query PLM Service Documents (Hybrid Search)
-        search_query = f"{asset_id} {symptom or 'overheating cooling failure'}"
-        plm = PLMSpecialist(self.mcp_client, endpoint_map.get("plm.search_documents", default_ep))
-        try:
-            plm_res = await plm.search_manuals(tenant_id, search_query)
-            results = plm_res.get("results", [])
-            if "plm.search_documents" not in evidence.tool_calls:
-                evidence.tool_calls.append("plm.search_documents")
-            if results:
-                top = results[0]
-                evidence.plm_findings = (
-                    f"Known cooling failure identified in manual {top.get('document_id')} {top.get('section')}: "
-                    f"{top.get('content')}"
-                )
-                evidence.spare_part_id = top.get("spare_part", "SP-COOL-9981")
-        except Exception:
-            pass
-
-        if not evidence.spare_part_id:
-            evidence.spare_part_id = "SP-COOL-9981"
-            evidence.plm_findings = (
-                "Known cooling-system failure mode identified in maintenance manual PLM-COOL-4021 §4.2"
-            )
-            if "plm.search_documents" not in evidence.tool_calls:
-                evidence.tool_calls.append("plm.search_documents")
-
-        # 4. Query ERP Inventory
-        erp = ERPSpecialist(self.mcp_client, endpoint_map.get("erp.get_inventory", default_ep))
-        try:
-            inv = await erp.check_inventory(tenant_id, evidence.spare_part_id)
-            evidence.spare_part_in_stock = inv.get("in_stock", 0) > 0
-            if "erp.get_inventory" not in evidence.tool_calls:
-                evidence.tool_calls.append("erp.get_inventory")
-        except Exception:
-            evidence.spare_part_in_stock = True
-            if "erp.get_inventory" not in evidence.tool_calls:
-                evidence.tool_calls.append("erp.get_inventory")
-
-        # 5. Pydantic AI Synthesis
+        # 2. Pydantic AI Recommendation Synthesis
         deps = PlannerDeps(
             tenant_id=tenant_id,
             asset_id=asset_id,

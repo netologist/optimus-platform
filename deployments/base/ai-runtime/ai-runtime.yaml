@@ -42,6 +42,8 @@ spec:
           env:
             - name: PLATFORM_BASE_URL
               value: "http://platform.optimus.svc:8080"
+            - name: DATABASE_URL
+              value: "postgres://optimus:optimus@postgres.optimus.svc:5432/optimus"
             - name: LLM_PROVIDER
               value: "mock"
           resources:
