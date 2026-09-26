@@ -35,7 +35,7 @@ spec:
       containers:
         - name: integration-mocks
           image: localhost:5001/optimus/integration-mocks:dev
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           args:
             - --system=all
             - --port=8080

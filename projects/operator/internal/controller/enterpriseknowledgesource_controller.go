@@ -82,8 +82,9 @@ func (r *EnterpriseKnowledgeSourceReconciler) Reconcile(ctx context.Context, req
 						RestartPolicy: corev1.RestartPolicyOnFailure,
 						Containers: []corev1.Container{
 							{
-								Name:  "ingestion-worker",
-								Image: "localhost:5001/optimus/ai-runtime:dev",
+								Name:            "ingestion-worker",
+								Image:           "localhost:5001/optimus/ai-runtime:dev",
+								ImagePullPolicy: corev1.PullAlways,
 								Command: []string{
 									"python",
 									"-m",
@@ -98,7 +99,7 @@ func (r *EnterpriseKnowledgeSourceReconciler) Reconcile(ctx context.Context, req
 								Env: []corev1.EnvVar{
 									{
 										Name:  "DATABASE_URL",
-										Value: "postgres://optimus:optimus@postgres.optimus.svc:5432/optimus",
+										Value: "postgres://optimus:optimus_secret@postgres.optimus.svc:5432/optimus?sslmode=disable",
 									},
 								},
 							},

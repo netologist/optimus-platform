@@ -91,7 +91,7 @@ async def ingest_document_file(
     if pool is not None:
         async with pool.acquire() as conn:
             async with conn.transaction():
-                await conn.execute("SET LOCAL app.current_tenant = $1", tenant_id)
+                await conn.execute("SELECT set_config('app.current_tenant', $1, true)", tenant_id)
                 await conn.execute(
                     """
                     INSERT INTO documents (id, tenant_id, title, doc_type)

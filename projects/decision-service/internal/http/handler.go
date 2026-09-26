@@ -39,6 +39,9 @@ func (h *Handler) routes() {
 			return
 		}
 
+		if req.TenantID == "" {
+			req.TenantID = r.Header.Get("X-Tenant-ID")
+		}
 		govDecision, err := h.svc.Decide(r.Context(), req)
 		if err != nil {
 			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)

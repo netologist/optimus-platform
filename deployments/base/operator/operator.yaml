@@ -17,6 +17,9 @@ rules:
   - apiGroups: ["apps"]
     resources: ["deployments"]
     verbs: ["*"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["*"]
   - apiGroups: [""]
     resources: ["services", "configmaps", "secrets", "events", "pods"]
     verbs: ["*"]
@@ -55,7 +58,7 @@ spec:
       containers:
         - name: operator
           image: localhost:5001/optimus/operator:dev
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           resources:
             requests:
               cpu: 50m

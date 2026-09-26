@@ -35,7 +35,7 @@ func (s *Storage) withTenantTx(ctx context.Context, tenantID string, fn func(tx 
 
 	// Set local tenant context for RLS policy enforcement
 	if tenantID != "" {
-		if _, err := tx.Exec(ctx, "SET LOCAL app.current_tenant = $1", tenantID); err != nil {
+		if _, err := tx.Exec(ctx, "SELECT set_config('app.current_tenant', $1, true)", tenantID); err != nil {
 			return fmt.Errorf("failed to set local tenant context %s: %w", tenantID, err)
 		}
 	}

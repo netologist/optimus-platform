@@ -35,13 +35,19 @@ spec:
       containers:
         - name: platform
           image: localhost:5001/optimus/platform:dev
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
               name: http
           env:
             - name: PORT
               value: "8080"
+            - name: DATABASE_URL
+              value: "postgres://optimus:optimus_secret@postgres.optimus.svc:5432/optimus?sslmode=disable"
+            - name: TEMPORAL_HOST
+              value: "temporal.optimus.svc:7233"
+            - name: REDPANDA_BROKERS
+              value: "redpanda.optimus.svc:9092"
           resources:
             requests:
               cpu: 50m

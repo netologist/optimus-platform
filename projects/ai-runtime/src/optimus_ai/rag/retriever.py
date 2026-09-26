@@ -195,7 +195,7 @@ class HybridRetriever:
         async with pool.acquire() as conn:
             async with conn.transaction():
                 # Enforce multi-tenant Row-Level Security
-                await conn.execute("SET LOCAL app.current_tenant = $1", tenant_id)
+                await conn.execute("SELECT set_config('app.current_tenant', $1, true)", tenant_id)
                 rows = await conn.fetch(sql, query, tenant_id, query_vector, limit)
 
                 for r in rows:
@@ -281,7 +281,7 @@ class HybridRetriever:
             embedding = compute_embedding(content)
             async with pool.acquire() as conn:
                 async with conn.transaction():
-                    await conn.execute("SET LOCAL app.current_tenant = $1", tenant_id)
+                    await conn.execute("SELECT set_config('app.current_tenant', $1, true)", tenant_id)
                     await conn.execute(
                         """
                         INSERT INTO documents (id, tenant_id, title, doc_type)
