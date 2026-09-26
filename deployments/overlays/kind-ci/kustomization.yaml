@@ -23,20 +23,20 @@ resources:
 # The CI pipeline uses `kustomize edit set image` to inject the commit SHA tag for built services
 images:
   - name: localhost:5001/optimus/platform:dev
-    newName: ghcr.io/optimus/platform
+    newName: ghcr.io/netologist/optimus-platform-platform
     newTag: latest
   - name: localhost:5001/optimus/decision-service:dev
-    newName: ghcr.io/optimus/decision-service
+    newName: ghcr.io/netologist/optimus-platform-decision-service
     newTag: latest
   - name: localhost:5001/optimus/integration-mocks:dev
-    newName: ghcr.io/optimus/integration-mocks
+    newName: ghcr.io/netologist/optimus-platform-integration-mocks
     newTag: latest
   - name: localhost:5001/optimus/ai-runtime:dev
-    newName: ghcr.io/optimus/ai-runtime
+    newName: ghcr.io/netologist/optimus-platform-ai-runtime
     newTag: latest
   - name: localhost:5001/optimus/operator:dev
-    newName: ghcr.io/optimus/operator
+    newName: ghcr.io/netologist/optimus-platform-operator
     newTag: latest
   - name: localhost:5001/ollaya-dev/ollaya:latest
-    newName: ghcr.io/optimus/ollaya
+    newName: ghcr.io/netologist/optimus-platform-ollaya
     newTag: latest
