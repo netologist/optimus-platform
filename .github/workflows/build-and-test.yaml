@@ -186,7 +186,7 @@ jobs:
 
       - name: Wait for application deployments rollout
         run: |
-          kubectl rollout status deployment/platform -n optimus --timeout=240s
+          kubectl rollout status deployment/platform -n optimus --timeout=360s
           kubectl rollout status deployment/decision-service -n optimus --timeout=180s
           kubectl rollout status deployment/integration-mocks -n optimus --timeout=120s
           kubectl rollout status deployment/ai-runtime -n optimus --timeout=180s
