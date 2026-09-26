@@ -30,9 +30,13 @@ _Avoid_: Prompt file, tool config, plugin spec
 A high-level agent capability comprising a specialized system prompt, a bound set of MCP tools, and deterministic output validation criteria.
 _Avoid_: Tool, function call, prompt snippet
 
-**Knowledge Source**:
-A managed repository of unstructured enterprise engineering documentation, maintenance manuals, or blueprints indexed for hybrid vector and keyword retrieval.
-_Avoid_: Document store, RAG folder, file bucket
+**Enterprise Knowledge Source**:
+A declarative Kubernetes resource defining a tenant documentation repository (S3, SharePoint, SMB), embedding parameters, and sync schedule, reconciled via background ingestion CronJobs.
+_Avoid_: Document bucket, RAG folder, file drop
+
+**Federated Knowledge Gateway**:
+A hybrid retrieval mechanism that merges tenant-partitioned pgvector semantic search with external vendor search APIs delegated via Model Context Protocol (MCP).
+_Avoid_: Universal search, meta search, doc aggregator
 
 ---
 
