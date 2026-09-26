@@ -157,8 +157,26 @@ jobs:
 
       - name: Deploy Tenant Acme Environment
         run: kubectl apply -k deployments/tenants/acme
-      - name: Wait for PostgreSQL rollout
-        run: kubectl rollout status deployment/postgres -n optimus --timeout=90s
+      - name: Wait for infrastructure deployments
+        run: |
+          kubectl rollout status deployment/postgres -n optimus --timeout=120s
+          kubectl rollout status deployment/redpanda -n optimus --timeout=120s
+          kubectl rollout status deployment/temporal -n optimus --timeout=180s
+          kubectl rollout status deployment/kong -n optimus --timeout=120s
+          kubectl rollout status deployment/jaeger -n optimus --timeout=120s
+
+      - name: Wait for Temporal gRPC to be ready
+        run: |
+          echo "Waiting for Temporal gRPC on temporal.optimus.svc:7233..."
+          for i in $(seq 1 30); do
+            if kubectl run --rm -i --restart=Never --image=busybox:1.36 temporal-probe-$i -n optimus \
+              -- sh -c "nc -zw3 temporal.optimus.svc 7233" 2>/dev/null; then
+              echo "Temporal gRPC is ready."
+              break
+            fi
+            echo "  attempt $i/30 — not ready yet, waiting 5s..."
+            sleep 5
+          done
 
       - name: Wait for DB Migration Kubernetes Job (optimus-db-migrate)
         run: ./scripts/migrate.sh
@@ -166,17 +184,13 @@ jobs:
       - name: Wait for DB Seed Kubernetes Job (optimus-db-seed)
         run: ./scripts/seed.sh
 
-      - name: Wait for remaining deployments rollout
+      - name: Wait for application deployments rollout
         run: |
-          kubectl rollout status deployment/redpanda -n optimus --timeout=90s
-          kubectl rollout status deployment/temporal -n optimus --timeout=90s
-          kubectl rollout status deployment/kong -n optimus --timeout=90s
-          kubectl rollout status deployment/jaeger -n optimus --timeout=90s
-          kubectl rollout status deployment/platform -n optimus --timeout=90s
-          kubectl rollout status deployment/decision-service -n optimus --timeout=90s
-          kubectl rollout status deployment/integration-mocks -n optimus --timeout=90s
-          kubectl rollout status deployment/ai-runtime -n optimus --timeout=90s
-          kubectl rollout status deployment/optimus-operator -n optimus --timeout=90s
+          kubectl rollout status deployment/platform -n optimus --timeout=180s
+          kubectl rollout status deployment/decision-service -n optimus --timeout=180s
+          kubectl rollout status deployment/integration-mocks -n optimus --timeout=120s
+          kubectl rollout status deployment/ai-runtime -n optimus --timeout=180s
+          kubectl rollout status deployment/optimus-operator -n optimus --timeout=120s
 
       - name: Run Live Cluster E2E Suite
         run: ./scripts/test-e2e-live.sh

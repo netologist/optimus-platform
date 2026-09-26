@@ -32,7 +32,7 @@ func main() {
 	port := flag.Int("port", defaultPort, "HTTP server port")
 	flag.Parse()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	// 0. Initialize OpenTelemetry Tracer
