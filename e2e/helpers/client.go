@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -17,10 +18,25 @@ type TestClient struct {
 }
 
 func NewTestClient() *TestClient {
+	pURL := os.Getenv("PLATFORM_URL")
+	if pURL == "" {
+		pURL = "http://127.0.0.1:8080"
+	}
+
+	dURL := os.Getenv("DECISION_URL")
+	if dURL == "" {
+		dURL = "http://127.0.0.1:8082"
+	}
+
+	mURL := os.Getenv("MOCKS_URL")
+	if mURL == "" {
+		mURL = "http://127.0.0.1:8081"
+	}
+
 	return &TestClient{
-		PlatformURL: "http://127.0.0.1:8080",
-		DecisionURL: "http://127.0.0.1:8082",
-		MocksURL:    "http://127.0.0.1:8081",
+		PlatformURL: pURL,
+		DecisionURL: dURL,
+		MocksURL:    mURL,
 		HTTP:        &http.Client{Timeout: 10 * time.Second},
 	}
 }
