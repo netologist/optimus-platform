@@ -48,8 +48,9 @@ ensure_port_forwards() {
     kubectl port-forward -n optimus svc/jaeger "${JAEGER_PORT}:16686" >/dev/null 2>&1 &
     PF_J_PID=$!
 
-    trap 'kill ${PF_P_PID:-} ${PF_D_PID:-} ${PF_M_PID:-} ${PF_J_PID:-} 2>/dev/null || true' EXIT
-
+    # Do NOT kill port-forwards immediately on exit, so Jaeger UI (16686) stays accessible in the browser!
+    # Instead, register clean-up only on SIGINT (Ctrl+C) or leave it active with background notice.
+    trap 'echo -e "\n${YELLOW}Demo interrupted.${NC}"; kill ${PF_P_PID:-} ${PF_D_PID:-} ${PF_M_PID:-} ${PF_J_PID:-} 2>/dev/null || true' INT TERM
     for i in {1..15}; do
       if curl -s "http://127.0.0.1:${PLATFORM_PORT}/healthz" >/dev/null 2>&1 && \
          curl -s "http://127.0.0.1:${DECISION_PORT}/healthz" >/dev/null 2>&1; then
@@ -168,5 +169,9 @@ fi
 echo -e "\n${BOLD}[5/5] Observability & End-to-End Tracing:${NC}"
 echo -e "  W3C Trace ID        : ${CYAN}${TRACE_ID}${NC}"
 echo -e "  Jaeger UI Link      : ${CYAN}${BOLD}http://localhost:16686/trace/${TRACE_ID}${NC}"
-echo -e "  Jaeger Search URL   : ${CYAN}http://localhost:16686/search?service=platform${NC}"
-echo "================================================================================"
+  echo -e "  Jaeger Search URL   : ${CYAN}http://localhost:16686/search?service=platform${NC}"
+  echo -e "\n${GREEN}${BOLD}Port-forward to Jaeger (http://localhost:16686) is kept running in the background.${NC}"
+  echo -e "Press ${BOLD}[Enter]${NC} to close port-forwards and exit: "
+  read -r _ || true
+  kill ${PF_P_PID:-} ${PF_D_PID:-} ${PF_M_PID:-} ${PF_J_PID:-} 2>/dev/null || true
+  echo "================================================================================"
