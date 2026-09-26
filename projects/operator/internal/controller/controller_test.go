@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -130,5 +131,71 @@ func TestEnterpriseEnvironmentReconciler(t *testing.T) {
 	var eamIntegration platformv1alpha1.EnterpriseIntegration
 	if err := client.Get(context.Background(), types.NamespacedName{Namespace: "optimus", Name: "acme-eam"}, &eamIntegration); err != nil {
 		t.Errorf("expected child integration acme-eam to be created: %v", err)
+	}
+}
+func TestEnterpriseKnowledgeSourceReconciler(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = platformv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = batchv1.AddToScheme(scheme)
+
+	ks := &platformv1alpha1.EnterpriseKnowledgeSource{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "optimus",
+			Name:      "plm-cooling-manuals",
+		},
+		Spec: platformv1alpha1.EnterpriseKnowledgeSourceSpec{
+			TenantRef:  "acme",
+			SourceType: "s3",
+			Endpoint:   "https://s3.eu-west-1.amazonaws.com/acme-plm-docs/pumps",
+			CredentialsSecretRef: corev1.LocalObjectReference{
+				Name: "acme-plm-s3-credentials",
+			},
+			Indexing: platformv1alpha1.IndexingSpec{
+				ChunkSize:      512,
+				ChunkOverlap:   64,
+				EmbeddingModel: "text-embedding-3-small",
+				Collection:     "acme_plm_manuals",
+			},
+			SyncSchedule: "0 2 * * *",
+		},
+	}
+
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ks).WithStatusSubresource(ks).Build()
+	reconciler := &EnterpriseKnowledgeSourceReconciler{Client: client, Scheme: scheme}
+
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "optimus", Name: "plm-cooling-manuals"}}
+	res, err := reconciler.Reconcile(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected reconcile error: %v", err)
+	}
+	if res.Requeue {
+		t.Errorf("unexpected requeue")
+	}
+
+	// 1. Verify status updated to Ready
+	var updated platformv1alpha1.EnterpriseKnowledgeSource
+	if err := client.Get(context.Background(), req.NamespacedName, &updated); err != nil {
+		t.Fatalf("failed to get reconciled knowledge source: %v", err)
+	}
+	if updated.Status.Phase != "Ready" {
+		t.Errorf("expected status Ready, got %s", updated.Status.Phase)
+	}
+	if updated.Status.VectorDimensions != 384 {
+		t.Errorf("expected vector dimensions 384, got %d", updated.Status.VectorDimensions)
+	}
+
+	// 2. Verify ingestion worker Job was dispatched
+	var syncJob batchv1.Job
+	jobKey := types.NamespacedName{Namespace: "optimus", Name: "knowledge-sync-plm-cooling-manuals"}
+	if err := client.Get(context.Background(), jobKey, &syncJob); err != nil {
+		t.Fatalf("expected ingestion worker Job to be created: %v", err)
+	}
+	if len(syncJob.Spec.Template.Spec.Containers) == 0 {
+		t.Fatalf("expected at least one container in ingestion worker Job")
+	}
+	container := syncJob.Spec.Template.Spec.Containers[0]
+	if container.Name != "ingestion-worker" {
+		t.Errorf("expected container name ingestion-worker, got %s", container.Name)
 	}
 }
