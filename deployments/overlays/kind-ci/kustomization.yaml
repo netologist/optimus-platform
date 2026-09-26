@@ -1,0 +1,42 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: optimus
+
+resources:
+  # Infrastructure Dependencies
+  - ../../base/postgres
+  - ../../base/redpanda
+  - ../../base/temporal
+  - ../../base/kong
+  - ../../base/ollaya
+  - ../../base/observability
+
+  # Application Services
+  - ../../base/platform
+  - ../../base/decision-service
+  - ../../base/integration-mocks
+  - ../../base/ai-runtime
+  - ../../base/operator
+
+# CI Image overrides targeting GitHub Container Registry (ghcr.io)
+# The CI pipeline uses `kustomize edit set image` to inject the commit SHA tag for built services
+images:
+  - name: localhost:5001/optimus/platform:dev
+    newName: ghcr.io/optimus/platform
+    newTag: latest
+  - name: localhost:5001/optimus/decision-service:dev
+    newName: ghcr.io/optimus/decision-service
+    newTag: latest
+  - name: localhost:5001/optimus/integration-mocks:dev
+    newName: ghcr.io/optimus/integration-mocks
+    newTag: latest
+  - name: localhost:5001/optimus/ai-runtime:dev
+    newName: ghcr.io/optimus/ai-runtime
+    newTag: latest
+  - name: localhost:5001/optimus/operator:dev
+    newName: ghcr.io/optimus/operator
+    newTag: latest
+  - name: localhost:5001/ollaya-dev/ollaya:latest
+    newName: ghcr.io/optimus/ollaya
+    newTag: latest
