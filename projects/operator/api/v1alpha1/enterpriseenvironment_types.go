@@ -11,6 +11,7 @@ type AISpec struct {
 	RAG bool `json:"rag"`
 	MCP bool `json:"mcp"`
 }
+
 // WorkflowRoute defines an operational signal-to-workflow mapping for a tenant
 type WorkflowRoute struct {
 	SignalPattern string            `json:"signalPattern"`

@@ -10,9 +10,9 @@ import (
 
 // ToolDefinition defines a tool exposed via MCP
 type ToolDefinition struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	InputSchema json.RawMessage `json:"inputSchema"`
+	Name        string                                 `json:"name"`
+	Description string                                 `json:"description"`
+	InputSchema json.RawMessage                        `json:"inputSchema"`
 	Handler     func(args map[string]any) (any, error) `json:"-"`
 }
 

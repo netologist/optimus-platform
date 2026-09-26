@@ -27,8 +27,22 @@ func NewHandler(svc *app.Service) *Handler {
 func (h *Handler) routes() {
 	// Root health
 	h.mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	})
+
+	// OpenAPI 3.0 specification & Swagger UI documentation
+	h.mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(GetOpenAPISpec())
+	})
+
+	h.mux.HandleFunc("/docs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(GetSwaggerUIHTML())
 	})
 
 	// Wrap tenant-scoped routes with Tenant Middleware
@@ -41,7 +55,9 @@ func (h *Handler) routes() {
 		case strings.HasSuffix(path, "/tools") && r.Method == http.MethodGet:
 			h.handleTools(w, r)
 		case strings.Contains(path, "/approvals/") && strings.HasSuffix(path, "/approve") && r.Method == http.MethodPost:
-			h.handleApprove(w, r)
+			h.handleApprovalDecision(w, r, true)
+		case strings.Contains(path, "/approvals/") && strings.HasSuffix(path, "/reject") && r.Method == http.MethodPost:
+			h.handleApprovalDecision(w, r, false)
 		default:
 			http.NotFound(w, r)
 		}
@@ -80,8 +96,8 @@ func (h *Handler) handleTools(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"tools": tools})
 }
 
-func (h *Handler) handleApprove(w http.ResponseWriter, r *http.Request) {
-	// Extract workflow ID from path: /v1/tenants/{tenant_id}/approvals/{workflow_id}/approve
+func (h *Handler) handleApprovalDecision(w http.ResponseWriter, r *http.Request, approved bool) {
+	// Extract workflow ID from path: /v1/tenants/{tenant_id}/approvals/{workflow_id}/(approve|reject)
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	var workflowID string
 	for i, p := range parts {
@@ -91,13 +107,32 @@ func (h *Handler) handleApprove(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if workflowID == "" {
+		http.Error(w, `{"error":"missing workflow_id in path"}`, http.StatusBadRequest)
+		return
+	}
+
+	var reqBody struct {
+		Approver string `json:"approver"`
+		Notes    string `json:"notes"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
+	}
+
+	resp, err := h.svc.ApproveWorkflow(r.Context(), app.ApproveWorkflowRequest{
+		WorkflowID: workflowID,
+		Approved:   approved,
+		Approver:   reqBody.Approver,
+	})
+	if err != nil {
+		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"status":      "approved",
-		"workflow_id": workflowID,
-		"signaled":    true,
-	})
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

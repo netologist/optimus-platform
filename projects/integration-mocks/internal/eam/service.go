@@ -19,11 +19,11 @@ func Register(s *mcpserver.Server) {
 				return nil, fmt.Errorf("asset_id is required")
 			}
 			return map[string]any{
-				"asset_id":   assetID,
-				"name":       "Pump " + assetID,
-				"type":       "Centrifugal Pump",
-				"plant":      "Manchester",
-				"status":     "OPERATIONAL",
+				"asset_id":    assetID,
+				"name":        "Pump " + assetID,
+				"type":        "Centrifugal Pump",
+				"plant":       "Manchester",
+				"status":      "OPERATIONAL",
 				"criticality": "HIGH",
 			}, nil
 		},
@@ -40,7 +40,7 @@ func Register(s *mcpserver.Server) {
 			}
 			// Realistic fixture data for P-104 overheating scenario
 			return map[string]any{
-				"asset_id": assetID,
+				"asset_id":              assetID,
 				"failures_last_30_days": 4,
 				"events": []map[string]any{
 					{"date": "2026-08-30", "event": "overheating", "resolved": true},

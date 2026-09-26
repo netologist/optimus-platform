@@ -1,20 +1,21 @@
 package workflow
 
 type AssetFailureWorkflowInput struct {
-	TenantID string `json:"tenant_id"`
-	AssetID  string `json:"asset_id"`
-	Symptom  string `json:"symptom"`
+	TenantID    string `json:"tenant_id"`
+	AssetID     string `json:"asset_id"`
+	Symptom     string `json:"symptom"`
+	Traceparent string `json:"traceparent,omitempty"`
 }
 
 type EvidenceContext struct {
-	AssetID             string   `json:"asset_id"`
-	TenantID            string   `json:"tenant_id"`
-	FailuresLast30Days  int      `json:"failures_last_30_days"`
-	PLMFindings         string   `json:"plm_findings"`
-	SparePartID         string   `json:"spare_part_id"`
-	SparePartInStock    bool     `json:"spare_part_in_stock"`
-	Recommendation      string   `json:"recommendation"`
-	ToolCalls           []string `json:"tool_calls"`
+	AssetID            string   `json:"asset_id"`
+	TenantID           string   `json:"tenant_id"`
+	FailuresLast30Days int      `json:"failures_last_30_days"`
+	PLMFindings        string   `json:"plm_findings"`
+	SparePartID        string   `json:"spare_part_id"`
+	SparePartInStock   bool     `json:"spare_part_in_stock"`
+	Recommendation     string   `json:"recommendation"`
+	ToolCalls          []string `json:"tool_calls"`
 }
 
 type GovernedDecision struct {

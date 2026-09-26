@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from optimus_ai.agents.planner import PlannerAgent, EvidenceContext
+from optimus_ai.agents.planner import EvidenceContext, PlannerAgent
 
 app = FastAPI(title="Optimus AI Runtime")
 planner = PlannerAgent()

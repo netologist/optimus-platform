@@ -35,11 +35,11 @@ func (s *WorkflowTestSuite) TestAssetFailureWorkflow_SuccessWithApproval() {
 	s.env.RegisterActivity(acts.ReleaseSparePartReservation)
 
 	s.env.OnActivity(acts.InvestigateFailure, mock.Anything, mock.Anything).Return(&workflow.EvidenceContext{
-		AssetID:             "P-104",
-		TenantID:            "acme",
-		FailuresLast30Days:  4,
-		SparePartID:         "SP-COOL-9981",
-		SparePartInStock:    true,
+		AssetID:            "P-104",
+		TenantID:           "acme",
+		FailuresLast30Days: 4,
+		SparePartID:        "SP-COOL-9981",
+		SparePartInStock:   true,
 	}, nil)
 
 	s.env.OnActivity(acts.RunDecision, mock.Anything, mock.Anything).Return(&workflow.GovernedDecision{

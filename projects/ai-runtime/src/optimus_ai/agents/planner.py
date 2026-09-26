@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
 from pydantic import BaseModel, Field
 
-from ..mcp.client import MCPClient
 from ..llm.provider import LLMProvider, get_provider
+from ..mcp.client import MCPClient
 from ..rag.retriever import HybridRetriever
-from .specialists import EAMSpecialist, PLMSpecialist, ERPSpecialist
+from .specialists import EAMSpecialist, ERPSpecialist, PLMSpecialist
 
 
 class EvidenceContext(BaseModel):

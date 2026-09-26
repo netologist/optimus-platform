@@ -1,0 +1,410 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Optimus Platform API",
+    "version": "1.0.0",
+    "description": "Enterprise Operations Platform API for Optimus. Orchestrates operational signal ingestion, dynamic MCP tool discovery, human-in-the-loop (HITL) supervisor approvals, and durable Temporal workflows with strict multi-tenant Row-Level Security (RLS) and W3C distributed tracing."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Local Platform API"
+    },
+    {
+      "url": "http://platform.optimus.svc:8080",
+      "description": "In-Cluster Kubernetes Service"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Signals",
+      "description": "Anomaly signal ingestion and workflow initiation"
+    },
+    {
+      "name": "Tools",
+      "description": "Dynamic MCP tool discovery per enterprise tenant"
+    },
+    {
+      "name": "Approvals",
+      "description": "Human-in-the-loop supervisor approval and rejection gates"
+    },
+    {
+      "name": "Health",
+      "description": "Service health and readiness probes"
+    }
+  ],
+  "paths": {
+    "/v1/tenants/{tenant_id}/signals": {
+      "post": {
+        "tags": ["Signals"],
+        "summary": "Ingest an operational failure signal and initiate investigation",
+        "description": "Ingests an immutable operational signal, persists it with tenant Row-Level Security (RLS), registers an outbox event, and launches the durable AssetFailureWorkflow in Temporal.",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "description": "Unique identifier of the enterprise tenant",
+            "schema": {
+              "type": "string",
+              "example": "acme"
+            }
+          },
+          {
+            "name": "traceparent",
+            "in": "header",
+            "required": false,
+            "description": "W3C distributed traceparent header",
+            "schema": {
+              "type": "string",
+              "example": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestSignalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Signal accepted and investigation workflow initiated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestSignalResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Tenant isolation or authentication error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant_id}/tools": {
+      "get": {
+        "tags": ["Tools"],
+        "summary": "Discover active MCP tools available for this tenant",
+        "description": "Returns the registered Model Context Protocol (MCP) tools provisioned for this tenant.",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "description": "Enterprise tenant identifier",
+            "schema": {
+              "type": "string",
+              "example": "acme"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active MCP tools list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActiveToolsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Tenant isolation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant_id}/approvals/{workflow_id}/approve": {
+      "post": {
+        "tags": ["Approvals"],
+        "summary": "Grant human supervisor approval to a paused workflow",
+        "description": "Signals the running Temporal workflow with approval-granted (approved: true).",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "acme"
+            }
+          },
+          {
+            "name": "workflow_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "wf-asset-failure-P-104-1727349123000"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Workflow approved and signal dispatched",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalActionResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed to signal workflow",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant_id}/approvals/{workflow_id}/reject": {
+      "post": {
+        "tags": ["Approvals"],
+        "summary": "Deny human supervisor approval for a paused workflow",
+        "description": "Signals the running Temporal workflow with approval-granted (approved: false).",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "acme"
+            }
+          },
+          {
+            "name": "workflow_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "wf-asset-failure-P-104-1727349123000"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Workflow rejected cleanly",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalActionResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed to signal workflow",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Liveness and readiness health probe",
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "IngestSignalRequest": {
+        "type": "object",
+        "required": ["asset_id", "symptom"],
+        "properties": {
+          "asset_id": {
+            "type": "string",
+            "example": "P-104"
+          },
+          "symptom": {
+            "type": "string",
+            "example": "repeated overheating anomaly"
+          }
+        }
+      },
+      "IngestSignalResponse": {
+        "type": "object",
+        "required": ["signal_id", "workflow_id", "status"],
+        "properties": {
+          "signal_id": {
+            "type": "string",
+            "example": "sig-1727349123000"
+          },
+          "workflow_id": {
+            "type": "string",
+            "example": "wf-asset-failure-P-104-1727349123000"
+          },
+          "status": {
+            "type": "string",
+            "example": "INGESTED"
+          }
+        }
+      },
+      "ActiveToolsResponse": {
+        "type": "object",
+        "required": ["tools"],
+        "properties": {
+          "tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MCPTool"
+            }
+          }
+        }
+      },
+      "MCPTool": {
+        "type": "object",
+        "required": ["name", "description", "endpoint"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "eam.get_maintenance_history"
+          },
+          "description": {
+            "type": "string",
+            "example": "Retrieve maintenance history from enterprise EAM"
+          },
+          "endpoint": {
+            "type": "string",
+            "example": "http://integration-mocks.optimus.svc:8080"
+          }
+        }
+      },
+      "ApprovalActionRequest": {
+        "type": "object",
+        "properties": {
+          "approver": {
+            "type": "string",
+            "example": "j.smith@acme.com"
+          },
+          "notes": {
+            "type": "string",
+            "example": "Thermostat replacement verified against PLM-COOL-4021"
+          }
+        }
+      },
+      "ApprovalActionResponse": {
+        "type": "object",
+        "required": ["workflow_id", "status", "signaled"],
+        "properties": {
+          "workflow_id": {
+            "type": "string",
+            "example": "wf-asset-failure-P-104-1727349123000"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["approved", "rejected"],
+            "example": "approved"
+          },
+          "signaled": {
+            "type": "boolean",
+            "example": true
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "string",
+            "example": "RLS violation or invalid request payload"
+          }
+        }
+      }
+    }
+  }
+}

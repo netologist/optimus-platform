@@ -33,24 +33,31 @@ func FromContext(ctx context.Context) (*Context, error) {
 // Middleware extracts tenant from URL path or X-Tenant-ID header
 func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.Header.Get("X-Tenant-ID")
+		headerTenant := r.Header.Get("X-Tenant-ID")
 
-		// If not in header, check path: /v1/tenants/{tenant_id}/...
-		if tenantID == "" {
-			parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-			for i, p := range parts {
-				if p == "tenants" && i+1 < len(parts) {
-					tenantID = parts[i+1]
-					break
-				}
+		var pathTenant string
+		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		for i, p := range parts {
+			if p == "tenants" && i+1 < len(parts) {
+				pathTenant = parts[i+1]
+				break
 			}
+		}
+
+		if headerTenant != "" && pathTenant != "" && headerTenant != pathTenant {
+			http.Error(w, `{"error":"tenant mismatch between X-Tenant-ID header and URL path"}`, http.StatusUnauthorized)
+			return
+		}
+
+		tenantID := headerTenant
+		if tenantID == "" {
+			tenantID = pathTenant
 		}
 
 		if tenantID == "" {
 			http.Error(w, `{"error":"missing tenant context (X-Tenant-ID or /v1/tenants/{id})"}`, http.StatusUnauthorized)
 			return
 		}
-
 		ctx := WithTenant(r.Context(), tenantID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

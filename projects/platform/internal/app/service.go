@@ -118,13 +118,32 @@ func (m *MemoryStorage) MarkOutboxMessagePublished(ctx context.Context, id int64
 	return fmt.Errorf("outbox message not found")
 }
 
-// Service coordinates platform use cases
-type Service struct {
-	storage Storage
+// WorkflowClient abstracts Temporal workflow orchestration
+type WorkflowClient interface {
+	StartAssetFailureWorkflow(ctx context.Context, workflowID, tenantID, assetID, symptom, traceparent string) error
+	SignalApproval(ctx context.Context, workflowID string, approved bool, approver string) error
 }
 
-func NewService(storage Storage) *Service {
-	return &Service{storage: storage}
+// Service coordinates platform use cases
+type Service struct {
+	storage  Storage
+	wfClient WorkflowClient
+}
+
+type ServiceOption func(*Service)
+
+func WithWorkflowClient(wfClient WorkflowClient) ServiceOption {
+	return func(s *Service) {
+		s.wfClient = wfClient
+	}
+}
+
+func NewService(storage Storage, opts ...ServiceOption) *Service {
+	s := &Service{storage: storage}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 type IngestSignalRequest struct {
@@ -180,11 +199,59 @@ func (s *Service) IngestSignal(ctx context.Context, req IngestSignalRequest, tra
 	if err := s.storage.SaveOutboxMessage(ctx, outboxMsg); err != nil {
 		return nil, fmt.Errorf("failed to enqueue outbox message: %w", err)
 	}
+	if s.wfClient != nil {
+		if err := s.wfClient.StartAssetFailureWorkflow(ctx, wfID, tc.TenantID, req.AssetID, req.Symptom, traceparent); err != nil {
+			return nil, fmt.Errorf("failed to trigger workflow: %w", err)
+		}
+	}
 
 	return &IngestSignalResponse{
 		SignalID:   sigID,
 		WorkflowID: wfID,
 		Status:     "INGESTED",
+	}, nil
+}
+
+type ApproveWorkflowRequest struct {
+	WorkflowID string `json:"workflow_id"`
+	Approved   bool   `json:"approved"`
+	Approver   string `json:"approver,omitempty"`
+}
+
+type ApproveWorkflowResponse struct {
+	WorkflowID string `json:"workflow_id"`
+	Status     string `json:"status"`
+	Signaled   bool   `json:"signaled"`
+}
+
+func (s *Service) ApproveWorkflow(ctx context.Context, req ApproveWorkflowRequest) (*ApproveWorkflowResponse, error) {
+	tc, err := tenant.FromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	approver := req.Approver
+	if approver == "" {
+		approver = fmt.Sprintf("supervisor@%s", tc.TenantID)
+	}
+
+	signaled := false
+	if s.wfClient != nil {
+		if err := s.wfClient.SignalApproval(ctx, req.WorkflowID, req.Approved, approver); err != nil {
+			return nil, fmt.Errorf("failed to signal workflow: %w", err)
+		}
+		signaled = true
+	}
+
+	status := "approved"
+	if !req.Approved {
+		status = "rejected"
+	}
+
+	return &ApproveWorkflowResponse{
+		WorkflowID: req.WorkflowID,
+		Status:     status,
+		Signaled:   signaled,
 	}, nil
 }
 

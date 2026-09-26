@@ -27,16 +27,22 @@ paths:
       tags:
         - Signals
       summary: Ingest an operational failure signal and initiate investigation
+      description: |
+        Ingests an immutable operational signal (e.g. Pump P-104 overheating),
+        persists it with tenant Row-Level Security (RLS), registers an outbox event,
+        and launches the durable `AssetFailureWorkflow` in Temporal.
       parameters:
         - name: tenant_id
           in: path
           required: true
+          description: Unique identifier of the enterprise tenant (e.g. 'acme')
           schema:
             type: string
             example: acme
         - name: traceparent
           in: header
           required: false
+          description: W3C distributed traceparent header
           schema:
             type: string
             example: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
@@ -60,7 +66,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Tenant isolation error
+          description: Tenant isolation or authentication error
           content:
             application/json:
               schema:
@@ -77,10 +83,14 @@ paths:
       tags:
         - Tools
       summary: Discover active MCP tools available for this tenant
+      description: |
+        Returns the registered Model Context Protocol (MCP) tools provisioned for this tenant
+        (e.g., EAM maintenance history, PLM technical manuals, ERP spare parts inventory, FSM dispatch).
       parameters:
         - name: tenant_id
           in: path
           required: true
+          description: Enterprise tenant identifier
           schema:
             type: string
             example: acme
@@ -103,16 +113,21 @@ paths:
       tags:
         - Approvals
       summary: Grant human supervisor approval to a paused workflow
+      description: |
+        Signals the running Temporal workflow with `approval-granted` (approved: true),
+        authorizing subsequent operational actions such as ERP inventory reservation and FSM work order creation.
       parameters:
         - name: tenant_id
           in: path
           required: true
+          description: Enterprise tenant identifier
           schema:
             type: string
             example: acme
         - name: workflow_id
           in: path
           required: true
+          description: Unique Temporal workflow execution ID
           schema:
             type: string
             example: wf-asset-failure-P-104-1727349123000
@@ -141,16 +156,21 @@ paths:
       tags:
         - Approvals
       summary: Deny human supervisor approval for a paused workflow
+      description: |
+        Signals the running Temporal workflow with `approval-granted` (approved: false),
+        terminating the workflow cleanly without executing downstream inventory reservations or field dispatches.
       parameters:
         - name: tenant_id
           in: path
           required: true
+          description: Enterprise tenant identifier
           schema:
             type: string
             example: acme
         - name: workflow_id
           in: path
           required: true
+          description: Unique Temporal workflow execution ID
           schema:
             type: string
             example: wf-asset-failure-P-104-1727349123000
@@ -201,9 +221,11 @@ components:
       properties:
         asset_id:
           type: string
+          description: Identifier of the physical asset reporting anomaly
           example: P-104
         symptom:
           type: string
+          description: Description or telemetry symptom observed
           example: repeated overheating anomaly
 
     IngestSignalResponse:
@@ -215,12 +237,15 @@ components:
       properties:
         signal_id:
           type: string
+          description: Unique operational signal ID
           example: sig-1727349123000
         workflow_id:
           type: string
+          description: Correlation and Temporal workflow ID
           example: wf-asset-failure-P-104-1727349123000
         status:
           type: string
+          description: Ingestion status
           example: INGESTED
 
     ActiveToolsResponse:
@@ -255,9 +280,11 @@ components:
       properties:
         approver:
           type: string
+          description: Name or email of supervisor issuing approval decision
           example: j.smith@acme.com
         notes:
           type: string
+          description: Optional operational notes or rationale
           example: Thermostat replacement verified against PLM-COOL-4021
 
     ApprovalActionResponse:
@@ -275,7 +302,7 @@ components:
           enum: [approved, rejected]
           example: approved
         signaled:
-          type: boolean
+          type: bool
           example: true
 
     ErrorResponse:

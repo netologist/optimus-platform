@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Protocol, Any
+from typing import Protocol
 
 
 class LLMProvider(Protocol):
@@ -55,7 +55,8 @@ class AnthropicProvider:
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}],
         )
-        return resp.content[0].text if resp.content else ""
+        first = resp.content[0] if resp.content else None
+        return getattr(first, "text", "") if first is not None else ""
 
 
 def get_provider() -> LLMProvider:

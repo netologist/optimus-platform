@@ -19,9 +19,9 @@ type Request struct {
 
 // Question defines a typed question for SystemOne/Ollaya
 type Question struct {
-	Type         string   `json:"type"`                   // "choice", "score", "noul"
-	Instructions string   `json:"instructions,omitempty"`
-	Criteria     any      `json:"criteria,omitempty"`     // list or map
+	Type         string `json:"type"` // "choice", "score", "noul"
+	Instructions string `json:"instructions,omitempty"`
+	Criteria     any    `json:"criteria,omitempty"` // list or map
 }
 
 // Response defines the SystemOne API response shape
