@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: temporal
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: temporal
+spec:
+  ports:
+    - name: grpc
+      port: 7233
+      targetPort: 7233
+    - name: ui
+      port: 8233
+      targetPort: 8233
+  selector:
+    app.kubernetes.io/name: temporal
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: temporal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: temporal
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: temporal
+    spec:
+      containers:
+        - name: temporal-server
+          image: temporalio/auto-setup:1.24.2
+          ports:
+            - containerPort: 7233
+              name: grpc
+          env:
+            - name: DB
+              value: "postgresql"
+            - name: DB_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              value: "optimus"
+            - name: POSTGRES_PWD
+              value: "optimus_secret"
+            - name: POSTGRES_SEEDS
+              value: "postgres.optimus.svc"
+            - name: DYNAMIC_CONFIG_FILE_PATH
+              value: "config/dynamicconfig/development-sql.yaml"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+        - name: temporal-ui
+          image: temporalio/ui:2.30.0
+          ports:
+            - containerPort: 8233
+              name: ui
+          env:
+            - name: TEMPORAL_ADDRESS
+              value: "127.0.0.1:7233"
+            - name: TEMPORAL_CORS_ORIGINS
+              value: "http://localhost:8233"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
