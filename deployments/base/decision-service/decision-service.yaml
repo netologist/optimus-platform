@@ -42,6 +42,8 @@ spec:
           env:
             - name: PORT
               value: "8082"
+            - name: DATABASE_URL
+              value: "postgres://optimus:optimus@postgres.optimus.svc:5432/optimus?sslmode=disable"
             - name: OLLAYA_URL
               value: "http://ollaya.optimus.svc:11435"
             - name: DECISION_MODEL

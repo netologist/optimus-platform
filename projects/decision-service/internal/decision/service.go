@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/optimus/projects/decision-service/internal/audit"
@@ -73,6 +74,11 @@ func (s *Service) Decide(ctx context.Context, req DecisionRequest) (*policy.Gove
 
 	if s.client != nil {
 		rawResp, err = s.client.Decide(ctx, sysOneReq)
+		if err != nil {
+			log.Printf("WARN: Ollaya SystemOne request failed (%v), falling back to deterministic simulation", err)
+		} else if rawResp != nil {
+			log.Printf("INFO: Ollaya SystemOne decision received for asset %s (model: %s, confidence: %.2f)", req.AssetID, rawResp.Model, rawResp.Confidence)
+		}
 	}
 
 	// Fallback/Deterministic simulation if client is nil or fails (e.g. offline unit test / CI stub)

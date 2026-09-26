@@ -20,6 +20,14 @@ for svc in "${SERVICES[@]}"; do
   docker push "${REGISTRY}/${svc}:${TAG}"
 done
 
+echo "----------------------------------------------------------------"
+echo "==> Building ollaya mock -> localhost:5001/ollaya-dev/ollaya:latest"
+echo "----------------------------------------------------------------"
+docker build -t "localhost:5001/ollaya-dev/ollaya:latest" -t "${REGISTRY}/ollaya:${TAG}" -f "projects/ollaya/Dockerfile" "projects/ollaya"
+echo "==> Pushing ollaya to local registry..."
+docker push "localhost:5001/ollaya-dev/ollaya:latest"
+docker push "${REGISTRY}/ollaya:${TAG}"
+
 echo "================================================================"
-echo "==> All 5 application images built and pushed successfully!"
+echo "==> All 6 application images built and pushed successfully!"
 echo "================================================================"

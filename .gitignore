@@ -42,3 +42,7 @@ junit.xml
 .env
 .env.local
 *.local
+
+# Agent skills cache
+.agents/
+skills-lock.json
