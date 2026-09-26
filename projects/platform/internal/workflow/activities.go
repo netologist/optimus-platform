@@ -47,7 +47,12 @@ func (a *Activities) InvestigateFailure(ctx context.Context, input AssetFailureW
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
+	if input.Traceparent != "" {
+		req.Header.Set("traceparent", input.Traceparent)
+		ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(req.Header))
+	} else {
+		otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
+	}
 	resp, err := a.httpClient.Do(req)
 	if err != nil || resp.StatusCode != http.StatusOK {
 		// Fallback deterministic simulation if offline in unit test

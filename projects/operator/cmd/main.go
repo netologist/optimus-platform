@@ -1,9 +1,10 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
-
+	"time"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -15,6 +16,7 @@ import (
 
 	platformv1alpha1 "github.com/optimus/projects/operator/api/v1alpha1"
 	"github.com/optimus/projects/operator/internal/controller"
+	"github.com/optimus/projects/operator/internal/telemetry"
 )
 
 var (
@@ -40,6 +42,15 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
+	// Initialize OpenTelemetry for Operator
+	tp, err := telemetry.InitTracer(context.Background(), "optimus-operator")
+	if err == nil && tp != nil {
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = tp.Shutdown(shutdownCtx)
+		}()
+	}
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsserver.Options{BindAddress: metricsAddr},

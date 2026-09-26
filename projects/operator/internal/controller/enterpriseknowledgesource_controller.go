@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -32,16 +36,28 @@ type EnterpriseKnowledgeSourceReconciler struct {
 func (r *EnterpriseKnowledgeSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx).WithValues("enterpriseknowledgesource", req.NamespacedName)
 
+	tr := otel.Tracer("optimus-operator")
+	ctx, span := tr.Start(ctx, "ReconcileKnowledgeSource",
+		trace.WithAttributes(
+			attribute.String("k8s.resource", req.NamespacedName.String()),
+		),
+	)
+	defer span.End()
+
 	var ks platformv1alpha1.EnterpriseKnowledgeSource
 	if err := r.Get(ctx, req.NamespacedName, &ks); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
+		span.RecordError(err)
 		return ctrl.Result{}, err
 	}
 
+	span.SetAttributes(
+		attribute.String("tenant.ref", ks.Spec.TenantRef),
+		attribute.String("source.type", ks.Spec.SourceType),
+	)
 	logger.Info("Reconciling EnterpriseKnowledgeSource", "tenant", ks.Spec.TenantRef, "sourceType", ks.Spec.SourceType)
-
 	// 1. Reconcile Ingestion Job / Worker
 	jobName := fmt.Sprintf("knowledge-sync-%s", ks.Name)
 	var existingJob batchv1.Job

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import re
@@ -132,20 +133,36 @@ class HybridRetriever:
         limit: int = 3,
     ) -> list[DocumentMatch]:
         """Perform Hybrid RRF (pgvector + FTS) search against PostgreSQL with RLS and Reranker."""
-        pool = await self._get_pool()
+        try:
+            from opentelemetry import trace
+            tracer = trace.get_tracer("ai-runtime")
+        except Exception:
+            tracer = None
 
-        if pool is not None:
-            try:
-                candidates = await self._search_postgres_hybrid(pool, query, tenant_id, limit=limit * 3)
-                if candidates:
-                    return self.reranker.rerank(query, candidates, top_k=limit)
-            except Exception as e:
-                logger.warning("PostgreSQL hybrid search error: %s. Falling back to in-memory index.", e)
+        cm = tracer.start_as_current_span("HybridRAGSearch") if tracer else contextlib.nullcontext()
+        with cm as span:
+            if span and hasattr(span, "set_attribute"):
+                span.set_attribute("rag.query", query)
+                span.set_attribute("rag.tenant_id", tenant_id)
 
-        # Fallback in-memory search
-        candidates = self._search_fallback(query, tenant_id)
-        return self.reranker.rerank(query, candidates, top_k=limit)
+            pool = await self._get_pool()
 
+            if pool is not None:
+                try:
+                    candidates = await self._search_postgres_hybrid(pool, query, tenant_id, limit=limit * 3)
+                    if candidates:
+                        if span and hasattr(span, "set_attribute"):
+                            span.set_attribute("rag.source", "postgres_pgvector")
+                            span.set_attribute("rag.candidates", len(candidates))
+                        return self.reranker.rerank(query, candidates, top_k=limit)
+                except Exception as e:
+                    logger.warning("PostgreSQL hybrid search error: %s. Falling back to in-memory index.", e)
+
+            # Fallback in-memory search
+            if span and hasattr(span, "set_attribute"):
+                span.set_attribute("rag.source", "in_memory_fallback")
+            candidates = self._search_fallback(query, tenant_id)
+            return self.reranker.rerank(query, candidates, top_k=limit)
     async def _search_postgres_hybrid(
         self,
         pool: Any,

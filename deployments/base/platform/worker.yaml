@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-worker
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: platform-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: platform-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: platform-worker
+    spec:
+      containers:
+        - name: platform-worker
+          image: localhost:5001/optimus/platform:dev
+          imagePullPolicy: Always
+          command: ["/app/platform-worker"]
+          env:
+            - name: TEMPORAL_HOST
+              value: "temporal.optimus.svc:7233"
+            - name: AI_RUNTIME_URL
+              value: "http://ai-runtime.optimus.svc:8000"
+            - name: DECISION_SERVICE_URL
+              value: "http://decision-service.optimus.svc:8082"
+            - name: MCP_SERVER_URL
+              value: "http://integration-mocks.optimus.svc:8080"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "jaeger.optimus.svc:4317"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
