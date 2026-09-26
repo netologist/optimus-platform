@@ -1,0 +1,35 @@
+apiVersion: ai.optimus.dev/v1alpha1
+kind: AgentSkill
+metadata:
+  id: "skill-cooling-diagnostic"
+  name: "cooling-system-diagnostic"
+  domain: "EAM"
+  version: "v1.0"
+  description: "Diagnoses recurrent thermal and mechanical anomalies in centrifugal cooling manifolds."
+
+spec:
+  systemPrompt: |
+    You are an expert Reliability Engineer investigating cooling system anomalies.
+    First, inspect the equipment maintenance history to detect recurrence patterns.
+    Second, perform a hybrid RAG search against technical manuals to identify matching failure modes.
+    Third, verify spare part availability in the local plant warehouse.
+    Do NOT attempt to execute repairs or create work orders directly.
+
+  requiredTools:
+    - "eam.get_maintenance_history"
+    - "plm.search_documents"
+    - "erp.get_inventory"
+
+  optionalTools:
+    - "eam.get_asset"
+    - "oi.get_recent_events"
+
+  outputContract:
+    mandatoryFields:
+      - "asset_id"
+      - "tenant_id"
+      - "failures_last_30_days"
+      - "plm_findings"
+      - "spare_part_id"
+      - "spare_part_in_stock"
+      - "recommendation"

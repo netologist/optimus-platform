@@ -18,3 +18,24 @@ spec:
   ai:
     rag: true
     mcp: true
+  workflowRouting:
+    - signalPattern: "telemetry.anomaly.thermal"
+      workflowName: "AssetFailureWorkflow"
+      parameters:
+        autoApproveThreshold: "0.95"
+        escalateAfterHours: "24"
+    - signalPattern: "inventory.stock.critical"
+      workflowName: "AutonomousReplenishmentWorkflow"
+      parameters:
+        maxAutoBudgetUSD: "1000"
+    - signalPattern: "asset.failures.repeated"
+      workflowName: "AssetInvestmentWorkflow"
+      parameters:
+        failureCountThreshold: "5"
+  skills:
+    - name: "cooling-system-diagnostic"
+      enabled: true
+    - name: "inventory-replenishment"
+      enabled: true
+    - name: "asset-capital-investment-review"
+      enabled: false

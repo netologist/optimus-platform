@@ -11,13 +11,27 @@ type AISpec struct {
 	RAG bool `json:"rag"`
 	MCP bool `json:"mcp"`
 }
+// WorkflowRoute defines an operational signal-to-workflow mapping for a tenant
+type WorkflowRoute struct {
+	SignalPattern string            `json:"signalPattern"`
+	WorkflowName  string            `json:"workflowName"`
+	Parameters    map[string]string `json:"parameters,omitempty"`
+}
+
+// SkillRef defines an enabled or disabled agent skill for a tenant
+type SkillRef struct {
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+}
 
 // EnterpriseEnvironmentSpec defines the desired state of EnterpriseEnvironment
 type EnterpriseEnvironmentSpec struct {
-	Tenant           string                   `json:"tenant"`
-	Systems          []string                 `json:"systems"`
+	Tenant           string                      `json:"tenant"`
+	Systems          []string                    `json:"systems"`
 	DecisionModelRef corev1.LocalObjectReference `json:"decisionModelRef"`
-	AI               AISpec                   `json:"ai"`
+	AI               AISpec                      `json:"ai"`
+	WorkflowRouting  []WorkflowRoute             `json:"workflowRouting,omitempty"`
+	Skills           []SkillRef                  `json:"skills,omitempty"`
 }
 
 // EnterpriseEnvironmentStatus defines the observed state of EnterpriseEnvironment
@@ -52,6 +66,14 @@ func (in *EnterpriseEnvironment) DeepCopyInto(out *EnterpriseEnvironment) {
 	if in.Spec.Systems != nil {
 		out.Spec.Systems = make([]string, len(in.Spec.Systems))
 		copy(out.Spec.Systems, in.Spec.Systems)
+	}
+	if in.Spec.WorkflowRouting != nil {
+		out.Spec.WorkflowRouting = make([]WorkflowRoute, len(in.Spec.WorkflowRouting))
+		copy(out.Spec.WorkflowRouting, in.Spec.WorkflowRouting)
+	}
+	if in.Spec.Skills != nil {
+		out.Spec.Skills = make([]SkillRef, len(in.Spec.Skills))
+		copy(out.Spec.Skills, in.Spec.Skills)
 	}
 	out.Status = in.Status
 	if in.Status.Conditions != nil {

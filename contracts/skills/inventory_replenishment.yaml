@@ -1,0 +1,25 @@
+apiVersion: ai.optimus.dev/v1alpha1
+kind: AgentSkill
+metadata:
+  id: "skill-inventory-replenishment"
+  name: "inventory-replenishment"
+  domain: "ERP"
+  version: "v1.0"
+  description: "Evaluates warehouse safety stock levels and prepares procurement requests."
+
+spec:
+  systemPrompt: |
+    You are an autonomous Supply Chain Specialist.
+    Evaluate part inventory levels against minimum safety thresholds.
+    Formulate spare part replenishment requests adhering to enterprise purchasing policies.
+
+  requiredTools:
+    - "erp.get_inventory"
+    - "erp.reserve_inventory"
+
+  outputContract:
+    mandatoryFields:
+      - "part_id"
+      - "current_stock"
+      - "reorder_quantity"
+      - "supplier_lead_time_days"

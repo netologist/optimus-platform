@@ -43,6 +43,30 @@ spec:
                       type: boolean
                     mcp:
                       type: boolean
+                workflowRouting:
+                  type: array
+                  items:
+                    type: object
+                    required: [signalPattern, workflowName]
+                    properties:
+                      signalPattern:
+                        type: string
+                      workflowName:
+                        type: string
+                      parameters:
+                        type: object
+                        additionalProperties:
+                          type: string
+                skills:
+                  type: array
+                  items:
+                    type: object
+                    required: [name, enabled]
+                    properties:
+                      name:
+                        type: string
+                      enabled:
+                        type: boolean
             status:
               type: object
               properties:

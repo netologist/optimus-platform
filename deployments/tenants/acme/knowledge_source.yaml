@@ -1,0 +1,19 @@
+apiVersion: platform.optimus.dev/v1alpha1
+kind: EnterpriseKnowledgeSource
+metadata:
+  name: plm-cooling-manuals
+  namespace: optimus
+  labels:
+    platform.optimus.dev/tenant: acme
+spec:
+  tenantRef: acme
+  sourceType: s3
+  endpoint: "https://s3.eu-west-1.amazonaws.com/acme-plm-docs/pumps"
+  credentialsSecretRef:
+    name: acme-plm-s3-credentials
+  indexing:
+    chunkSize: 512
+    chunkOverlap: 64
+    embeddingModel: "text-embedding-3-small"
+    collection: "acme_plm_manuals"
+  syncSchedule: "0 2 * * *"

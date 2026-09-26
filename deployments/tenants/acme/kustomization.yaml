@@ -7,3 +7,5 @@ resources:
   - environment.yaml
   - decision_model.yaml
   - integrations.yaml
+  - knowledge_source.yaml
+  - policy.yaml

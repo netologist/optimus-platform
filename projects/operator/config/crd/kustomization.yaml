@@ -5,3 +5,5 @@ resources:
   - platform.optimus.dev_enterpriseenvironments.yaml
   - platform.optimus.dev_enterpriseintegrations.yaml
   - platform.optimus.dev_decisionmodels.yaml
+  - platform.optimus.dev_enterpriseknowledgesources.yaml
+  - platform.optimus.dev_decisionpolicies.yaml

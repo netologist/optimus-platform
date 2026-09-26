@@ -1,0 +1,20 @@
+apiVersion: platform.optimus.dev/v1alpha1
+kind: DecisionPolicy
+metadata:
+  name: manufacturing-standard-v1
+  namespace: optimus
+  labels:
+    platform.optimus.dev/tenant: acme
+spec:
+  tenant: acme
+  version: "v1.2"
+  description: "Standard plant risk policy mandating human supervisor sign-off on HIGH safety risk or confidence < 0.75"
+  rules:
+    approvalTriggers:
+      safetyRiskIn:
+        - "HIGH"
+      severityThreshold: 2.0
+      minConfidenceThreshold: 0.75
+    financialLimits:
+      maxAutoDispatchCostUSD: 1000.00
+      requireApprovalIfPartUnobtainable: true
