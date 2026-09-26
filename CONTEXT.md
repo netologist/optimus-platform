@@ -14,6 +14,14 @@ _Avoid_: Alert, alarm, notification, ticket
 An isolated enterprise organization with strict data partitioning, distinct integration endpoints, custom policies, and dedicated security boundaries.
 _Avoid_: Customer, account, workspace, client
 
+**Durable Domain Event**:
+A transactional, replayable business event (e.g., work_order.created) persisted via the Transactional Outbox pattern to Redpanda with W3C trace context.
+_Avoid_: Message, notification, signal
+
+**Ephemeral Agent Signal**:
+A sub-second, fire-and-forget telemetry packet published over NATS Core reflecting live agent reasoning, tool invocation progress, and diagnostic state for real-time observation.
+_Avoid_: Progress log, debug message, live trace
+
 ---
 
 ### Agentic AI & Knowledge Retrieval
