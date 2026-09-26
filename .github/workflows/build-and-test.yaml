@@ -157,16 +157,26 @@ jobs:
 
       - name: Deploy Tenant Acme Environment
         run: kubectl apply -k deployments/tenants/acme
+      - name: Wait for PostgreSQL rollout
+        run: kubectl rollout status deployment/postgres -n optimus --timeout=90s
 
-      - name: Wait for core infrastructure deployments
+      - name: Run Database Migrations
+        run: ./scripts/migrate.sh
+
+      - name: Seed Operational Fixtures (Tenant Acme, Asset P-104)
+        run: ./scripts/seed.sh
+
+      - name: Wait for remaining deployments rollout
         run: |
-          kubectl rollout status deployment/postgres -n optimus --timeout=90s
           kubectl rollout status deployment/redpanda -n optimus --timeout=90s
           kubectl rollout status deployment/temporal -n optimus --timeout=90s
           kubectl rollout status deployment/kong -n optimus --timeout=90s
           kubectl rollout status deployment/jaeger -n optimus --timeout=90s
+          kubectl rollout status deployment/platform -n optimus --timeout=90s
+          kubectl rollout status deployment/decision-service -n optimus --timeout=90s
+          kubectl rollout status deployment/integration-mocks -n optimus --timeout=90s
+          kubectl rollout status deployment/ai-runtime -n optimus --timeout=90s
+          kubectl rollout status deployment/optimus-operator -n optimus --timeout=90s
 
-      - name: Run E2E Integration Suite
-        run: |
-          cd e2e
-          go test -v -tags=e2e ./scenarios/... -timeout 20m
+      - name: Run Live Cluster E2E Suite
+        run: ./scripts/test-e2e-live.sh

@@ -57,10 +57,17 @@ run = "./scripts/deploy.sh kind-dev"
 [tasks."deploy:ci"]
 description = "Deploy to CI Kind cluster using kind-ci overlay"
 run = "./scripts/deploy.sh kind-ci"
+[tasks.migrate]
+description = "Apply database schema migrations to PostgreSQL"
+run = "./scripts/migrate.sh"
+
+[tasks.seed]
+description = "Seed operational fixtures (tenants, assets, documents) into PostgreSQL"
+run = "./scripts/seed.sh"
+
 [tasks.crds-install]
 description = "Install Kubernetes Operator CRDs"
 run = "kubectl apply -k projects/operator/config/crd"
-
 [tasks.test]
 description = "Run fast tests across all projects (no Kind required)"
 run = """
@@ -91,6 +98,9 @@ run = """
 description = "Run full Kind E2E scenarios"
 run = "cd e2e && go test -v -tags=e2e ./scenarios/... -timeout 20m"
 
+[tasks."e2e:live"]
+description = "Run E2E test against live cluster using port-forwards"
+run = "./scripts/test-e2e-live.sh"
 [tasks.demo]
 description = "Run the interactive maintenance CLI demo"
 run = "./scripts/demo.sh"
