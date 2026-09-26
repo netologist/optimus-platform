@@ -20,6 +20,7 @@ import (
 	"github.com/optimus/projects/platform/internal/transport"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
+
 func main() {
 	defaultPort := 8080
 	if envPort := os.Getenv("PORT"); envPort != "" {

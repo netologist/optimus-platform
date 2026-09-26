@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/optimus/projects/decision-service/internal/decision"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
-	"github.com/optimus/projects/decision-service/internal/decision"
 )
 
 type Handler struct {

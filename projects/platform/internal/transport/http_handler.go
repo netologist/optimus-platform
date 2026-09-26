@@ -5,12 +5,12 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/optimus/projects/platform/internal/app"
+	"github.com/optimus/projects/platform/internal/tenant"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
-	"github.com/optimus/projects/platform/internal/app"
-	"github.com/optimus/projects/platform/internal/tenant"
 )
 
 // Handler serves Platform HTTP API

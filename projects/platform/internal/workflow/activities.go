@@ -49,7 +49,6 @@ func (a *Activities) InvestigateFailure(ctx context.Context, input AssetFailureW
 	req.Header.Set("Content-Type", "application/json")
 	if input.Traceparent != "" {
 		req.Header.Set("traceparent", input.Traceparent)
-		ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(req.Header))
 	} else {
 		otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
 	}
