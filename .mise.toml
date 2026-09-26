@@ -8,7 +8,7 @@ kind = "latest"
 kustomize = "latest"
 buf = "latest"
 sqlc = "latest"
-goose = "latest"
+"aqua:pressly/goose" = "latest"
 golangci-lint = "latest"
 lefthook = "latest"
 
