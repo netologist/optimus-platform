@@ -186,11 +186,22 @@ jobs:
 
       - name: Wait for application deployments rollout
         run: |
-          kubectl rollout status deployment/decision-service -n optimus --timeout=180s
-          kubectl rollout status deployment/integration-mocks -n optimus --timeout=120s
-          kubectl rollout status deployment/ai-runtime -n optimus --timeout=180s
-          kubectl rollout status deployment/optimus-operator -n optimus --timeout=120s
-          kubectl rollout status deployment/platform -n optimus --timeout=720s
+          echo "Checking deployment rollout status..."
+          kubectl get deployments -n optimus
+
+          echo "Waiting for all application deployments to become ready..."
+          if ! kubectl wait --namespace optimus --for=condition=available deployment --all --timeout=480s; then
+            echo "❌ One or more deployments failed to become ready! Diagnostics:"
+            kubectl get pods -n optimus -o wide || true
+            for pod in $(kubectl get pods -n optimus -o jsonpath='{.items[?(@.status.containerStatuses[0].ready==false)].metadata.name}' 2>/dev/null); do
+              echo "=== Pod: ${pod} ==="
+              kubectl describe pod "${pod}" -n optimus | grep -A 8 "State:\|Reason:\|Last State:" || true
+              kubectl logs "${pod}" -n optimus --tail=80 || true
+            done
+            exit 1
+          fi
+          echo "✅ All application services are ready."
+          kubectl get deployments -n optimus
 
       - name: Run Live Cluster E2E Suite
         run: ./scripts/test-e2e-live.sh
