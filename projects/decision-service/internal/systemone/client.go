@@ -8,6 +8,9 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 // Request defines the SystemOne API request shape
@@ -66,7 +69,7 @@ func (c *Client) Decide(ctx context.Context, req Request) (*Response, error) {
 		return nil, fmt.Errorf("failed to create http request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(httpReq.Header))
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("systemone request failed: %w", err)
