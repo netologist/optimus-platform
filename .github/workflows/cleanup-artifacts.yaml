@@ -1,0 +1,76 @@
+name: Cleanup GHCR Container Artifacts
+
+on:
+  schedule:
+    # Run weekly on Sunday at 03:00 UTC
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      keep_versions:
+        description: 'Number of latest image versions to keep per package'
+        required: true
+        default: '3'
+        type: string
+      dry_run:
+        description: 'Perform a dry run without deleting packages'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  packages: write
+  actions: write
+  contents: read
+
+jobs:
+  cleanup-ghcr-packages:
+    name: Prune Old Container Images (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - platform
+          - decision-service
+          - integration-mocks
+          - operator
+          - ai-runtime
+          - ollaya
+    steps:
+      - name: Prune Old Package Versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: "${{ github.event.repository.name }}-${{ matrix.package }}"
+          package-type: 'container'
+          min-versions-to-keep: ${{ github.event.inputs.keep_versions || 3 }}
+          ignore-versions: '^latest$'
+        continue-on-error: true
+
+  cleanup-workflow-runs:
+    name: Prune Old Workflow Artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete Old Workflow Artifacts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const artifacts = await github.rest.actions.listArtifactsForRepo({
+              owner,
+              repo,
+              per_page: 50,
+            });
+            console.log(`Found ${artifacts.data.total_count} artifacts`);
+            for (const artifact of artifacts.data.artifacts) {
+              console.log(`Deleting artifact: ${artifact.name} (id: ${artifact.id})`);
+              try {
+                await github.rest.actions.deleteArtifact({
+                  owner,
+                  repo,
+                  artifact_id: artifact.id,
+                });
+              } catch (err) {
+                console.warn(`Failed to delete artifact ${artifact.id}: ${err.message}`);
+              }
+            }
