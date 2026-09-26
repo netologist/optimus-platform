@@ -1,0 +1,61 @@
+# Minimal deployment manifest for Decision Service
+# TODO: In production, configure Redis decision caching and mTLS connection to hosted Ollaya/TypeSafe
+apiVersion: v1
+kind: Service
+metadata:
+  name: decision-service
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: decision-service
+spec:
+  ports:
+    - name: http
+      port: 8082
+      targetPort: 8082
+  selector:
+    app.kubernetes.io/name: decision-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: decision-service
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: decision-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: decision-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: decision-service
+    spec:
+      containers:
+        - name: decision-service
+          image: localhost:5001/optimus/decision-service:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8082
+              name: http
+          env:
+            - name: PORT
+              value: "8082"
+            - name: OLLAYA_URL
+              value: "http://ollaya.optimus.svc:11435"
+            - name: DECISION_MODEL
+              value: "laya"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8082
+            initialDelaySeconds: 2
+            periodSeconds: 5

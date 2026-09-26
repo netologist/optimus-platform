@@ -1,0 +1,51 @@
+# Minimal deployment manifest for Enterprise Integration Mocks
+# TODO: In production, split into independently scaled deployments per enterprise system
+apiVersion: v1
+kind: Service
+metadata:
+  name: integration-mocks
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: integration-mocks
+spec:
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+  selector:
+    app.kubernetes.io/name: integration-mocks
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: integration-mocks
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: integration-mocks
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: integration-mocks
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: integration-mocks
+    spec:
+      containers:
+        - name: integration-mocks
+          image: localhost:5001/optimus/integration-mocks:dev
+          imagePullPolicy: IfNotPresent
+          args:
+            - --system=all
+            - --port=8080
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

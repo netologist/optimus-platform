@@ -1,0 +1,65 @@
+# Minimal deployment manifest for Optimus Kubernetes Operator
+# TODO: In production, configure cert-manager for admission webhooks and multi-replica leader election
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: optimus-operator
+  namespace: optimus
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: optimus-operator-role
+rules:
+  - apiGroups: ["platform.optimus.dev"]
+    resources: ["*"]
+    verbs: ["*"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["*"]
+  - apiGroups: [""]
+    resources: ["services", "configmaps", "secrets", "events", "pods"]
+    verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: optimus-operator-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: optimus-operator-role
+subjects:
+  - kind: ServiceAccount
+    name: optimus-operator
+    namespace: optimus
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: optimus-operator
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: operator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: operator
+    spec:
+      serviceAccountName: optimus-operator
+      containers:
+        - name: operator
+          image: localhost:5001/optimus/operator:dev
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
