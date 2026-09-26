@@ -1,6 +1,6 @@
 module github.com/optimus/e2e
 
-go 1.26
+go 1.24
 
 require (
 	github.com/go-logr/logr v1.4.2 // indirect
