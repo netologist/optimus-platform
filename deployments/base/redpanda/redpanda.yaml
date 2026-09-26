@@ -39,7 +39,7 @@ spec:
       containers:
         - name: redpanda
           image: docker.redpanda.com/redpandadata/redpanda:v24.2.14
-          command:
+          args:
             - redpanda
             - start
             - --overprovisioned

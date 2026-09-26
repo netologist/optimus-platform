@@ -32,7 +32,7 @@ spec:
     spec:
       containers:
         - name: ollaya
-          image: ollaya/ollaya:latest
+          image: localhost:5001/ollaya-dev/ollaya:latest
           imagePullPolicy: IfNotPresent
           env:
             - name: OLLAYA_HOST

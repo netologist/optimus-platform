@@ -41,7 +41,7 @@ spec:
               name: grpc
           env:
             - name: DB
-              value: "postgresql"
+              value: "postgres12"
             - name: DB_PORT
               value: "5432"
             - name: POSTGRES_USER
@@ -50,8 +50,6 @@ spec:
               value: "optimus_secret"
             - name: POSTGRES_SEEDS
               value: "postgres.optimus.svc"
-            - name: DYNAMIC_CONFIG_FILE_PATH
-              value: "config/dynamicconfig/development-sql.yaml"
           resources:
             requests:
               cpu: 100m
