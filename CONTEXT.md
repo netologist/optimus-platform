@@ -50,6 +50,10 @@ _Avoid_: LLM decision, prediction, suggestion, judgment
 A versioned, deterministic rule set that evaluates a model's calibrated probabilities to enforce enterprise guardrails (e.g., mandating human supervisor sign-off on high safety risks).
 _Avoid_: Business logic, hardcoded if-statement, prompt guardrail
 
+**Declarative Decision Policy**:
+A versioned YAML/JSON manifest or database record declaring calibrated risk thresholds, financial guardrails, and human escalation rules evaluated against decision model outputs.
+_Avoid_: Policy script, rule file, config flag
+
 ---
 
 ### Orchestration & Enterprise Action

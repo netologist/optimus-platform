@@ -1,0 +1,26 @@
+# Policy Manifest: High-Throughput Autonomous Logistics & FMCG
+apiVersion: policy.optimus.dev/v1alpha1
+kind: DecisionPolicy
+metadata:
+  id: "pol-logistics-autonomous"
+  version: "v1.0"
+  tenant: "fast-logistics"
+  name: "High-Volume Autonomous Operations Policy"
+  description: "Optimized for minimal latency and maximum automated throughput."
+
+rules:
+  # Only catastrophic risks pause for human sign-off
+  approvalTriggers:
+    safetyRiskIn:
+      - "HIGH"
+    severityThreshold: 2.8                 # Only extreme P1 catastrophic failures
+    minConfidenceThreshold: 0.65           # Tolerant of noisier sensor input
+  
+  financialLimits:
+    maxAutoDispatchCostUSD: 5000.00        # High autonomous budget limit
+    requireApprovalIfPartUnobtainable: false # Auto-backorder if unavailable
+  
+  onApprovalRequired:
+    timeoutHours: 48
+    escalateTo: "regional-dispatch-queue"
+    defaultOnTimeout: "AUTO_APPROVE"       # Default to unblocking operations

@@ -1,0 +1,27 @@
+# Policy Manifest: Aerospace & Defense Strict Compliance
+apiVersion: policy.optimus.dev/v1alpha1
+kind: DecisionPolicy
+metadata:
+  id: "pol-defense-strict"
+  version: "v1.0"
+  tenant: "defense-corp"
+  name: "Aerospace and Critical Defense Safety Policy"
+  description: "Strict zero-tolerance policy mandating dual-human oversight on any moderate or high risk."
+
+rules:
+  # Mandatory approval on virtually all operational anomalies
+  approvalTriggers:
+    safetyRiskIn:
+      - "HIGH"
+      - "MEDIUM"
+    severityThreshold: 1.0                 # Any P1 or P2 requires supervisor sign-off
+    minConfidenceThreshold: 0.90           # Strict 90% confidence requirement
+  
+  financialLimits:
+    maxAutoDispatchCostUSD: 0.00           # No autonomous financial commitments allowed
+    requireApprovalIfPartUnobtainable: true
+  
+  onApprovalRequired:
+    timeoutHours: 8                        # Urgent response required
+    escalateTo: "lead-safety-officer"
+    defaultOnTimeout: "FAIL_SAFE_STOP"     # Trigger safety shutdown if unconfirmed

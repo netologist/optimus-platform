@@ -1,0 +1,28 @@
+# Policy Manifest: Standard Manufacturing Operations
+apiVersion: policy.optimus.dev/v1alpha1
+kind: DecisionPolicy
+metadata:
+  id: "pol-mfg-standard"
+  version: "v1.2"
+  tenant: "acme"
+  name: "Standard Manufacturing Facility Risk Policy"
+  description: "Balanced autonomous dispatch policy for standard industrial plant machinery."
+
+rules:
+  # Conditions that mandate human supervisor approval
+  approvalTriggers:
+    safetyRiskIn:
+      - "HIGH"
+    severityThreshold: 2.0                 # Maps to P1 severity
+    minConfidenceThreshold: 0.75           # Force approval if model confidence is below 75%
+  
+  # Financial guardrails for autonomous dispatch
+  financialLimits:
+    maxAutoDispatchCostUSD: 1000.00
+    requireApprovalIfPartUnobtainable: true
+  
+  # Actions to take when approval is required
+  onApprovalRequired:
+    timeoutHours: 24
+    escalateTo: "operations-supervisor"
+    defaultOnTimeout: "REJECT"
