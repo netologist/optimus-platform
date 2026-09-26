@@ -1,0 +1,172 @@
+name: Build & Kind E2E Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  detect-changes:
+    name: Detect Changed Services
+    runs-on: ubuntu-latest
+    outputs:
+      platform: ${{ steps.filter.outputs.platform }}
+      decision-service: ${{ steps.filter.outputs.decision-service }}
+      integration-mocks: ${{ steps.filter.outputs.integration-mocks }}
+      operator: ${{ steps.filter.outputs.operator }}
+      ai-runtime: ${{ steps.filter.outputs.ai-runtime }}
+      ollaya: ${{ steps.filter.outputs.ollaya }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Path Filter
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            platform:
+              - 'projects/platform/**'
+            decision-service:
+              - 'projects/decision-service/**'
+            integration-mocks:
+              - 'projects/integration-mocks/**'
+            operator:
+              - 'projects/operator/**'
+            ai-runtime:
+              - 'projects/ai-runtime/**'
+            ollaya:
+              - 'projects/ollaya/**'
+
+  build-and-push:
+    name: Build & Push Service (${{ matrix.service }})
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: platform
+            context: projects/platform
+            changed: ${{ needs.detect-changes.outputs.platform }}
+          - service: decision-service
+            context: projects/decision-service
+            changed: ${{ needs.detect-changes.outputs.decision-service }}
+          - service: integration-mocks
+            context: projects/integration-mocks
+            changed: ${{ needs.detect-changes.outputs.integration-mocks }}
+          - service: operator
+            context: projects/operator
+            changed: ${{ needs.detect-changes.outputs.operator }}
+          - service: ai-runtime
+            context: projects/ai-runtime
+            changed: ${{ needs.detect-changes.outputs.ai-runtime }}
+          - service: ollaya
+            context: projects/ollaya
+            changed: ${{ needs.detect-changes.outputs.ollaya }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Lowercase repository name for image tag
+        id: image-name
+        run: |
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "image=${{ env.REGISTRY }}/${REPO_LOWER}-${{ matrix.service }}" >> $GITHUB_OUTPUT
+
+      - name: Build and Push (when service changed or on main)
+        if: ${{ matrix.changed == 'true' || github.ref == 'refs/heads/main' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: |
+            ${{ steps.image-name.outputs.image }}:${{ github.sha }}
+            ${{ steps.image-name.outputs.image }}:latest
+
+      - name: Retag existing latest (when service unchanged on PR)
+        if: ${{ matrix.changed != 'true' && github.ref != 'refs/heads/main' }}
+        run: |
+          IMAGE="${{ steps.image-name.outputs.image }}"
+          echo "Service ${{ matrix.service }} did not change. Pulling latest and retagging with ${{ github.sha }}..."
+          if docker pull "${IMAGE}:latest"; then
+            docker tag "${IMAGE}:latest" "${IMAGE}:${{ github.sha }}"
+            docker push "${IMAGE}:${{ github.sha }}"
+          else
+            echo "Latest image not found in GHCR. Building fallback image..."
+            docker build -t "${IMAGE}:${{ github.sha }}" -t "${IMAGE}:latest" "${{ matrix.context }}"
+            docker push "${IMAGE}:${{ github.sha }}"
+            docker push "${IMAGE}:latest"
+          fi
+
+  kind-e2e:
+    name: Kind Cluster & E2E Tests
+    needs: [build-and-push]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+
+      - name: Create Kind Cluster
+        uses: helm/kind-action@v1.12.0
+        with:
+          cluster_name: optimus-ci
+          config: deployments/kind/cluster.yaml
+          wait: 120s
+
+      - name: Configure GHCR image tags in kind-ci overlay
+        run: |
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          cd deployments/overlays/kind-ci
+          kustomize edit set image "localhost:5001/optimus/platform:dev=${{ env.REGISTRY }}/${REPO_LOWER}-platform:${{ github.sha }}"
+          kustomize edit set image "localhost:5001/optimus/decision-service:dev=${{ env.REGISTRY }}/${REPO_LOWER}-decision-service:${{ github.sha }}"
+          kustomize edit set image "localhost:5001/optimus/integration-mocks:dev=${{ env.REGISTRY }}/${REPO_LOWER}-integration-mocks:${{ github.sha }}"
+          kustomize edit set image "localhost:5001/optimus/operator:dev=${{ env.REGISTRY }}/${REPO_LOWER}-operator:${{ github.sha }}"
+          kustomize edit set image "localhost:5001/optimus/ai-runtime:dev=${{ env.REGISTRY }}/${REPO_LOWER}-ai-runtime:${{ github.sha }}"
+          kustomize edit set image "localhost:5001/ollaya-dev/ollaya:latest=${{ env.REGISTRY }}/${REPO_LOWER}-ollaya:${{ github.sha }}"
+
+      - name: Deploy Operator CRDs
+        run: kubectl apply -k projects/operator/config/crd
+
+      - name: Deploy Kind-CI Overlay
+        run: kubectl apply -k deployments/overlays/kind-ci
+
+      - name: Deploy Tenant Acme Environment
+        run: kubectl apply -k deployments/tenants/acme
+
+      - name: Wait for core infrastructure deployments
+        run: |
+          kubectl rollout status deployment/postgres -n optimus --timeout=90s
+          kubectl rollout status deployment/redpanda -n optimus --timeout=90s
+          kubectl rollout status deployment/temporal -n optimus --timeout=90s
+          kubectl rollout status deployment/kong -n optimus --timeout=90s
+          kubectl rollout status deployment/jaeger -n optimus --timeout=90s
+
+      - name: Run E2E Integration Suite
+        run: |
+          cd e2e
+          go test -v -tags=e2e ./scenarios/... -timeout 20m
