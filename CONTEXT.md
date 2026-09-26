@@ -21,6 +21,10 @@ _Avoid_: Customer, account, workspace, client
 **Evidence Context**:
 A structured, verifiable synthesis of data collected by AI specialist agents across enterprise systems (EAM, PLM, ERP, FSM) via Model Context Protocol (MCP) and Hybrid RAG.
 _Avoid_: LLM output, agent thoughts, prompt response, summary
+**Agent Skill Manifest**:
+A declarative YAML/JSON document specifying an agent persona, bound MCP tools, and a structured output contract, allowing dynamic capability loading without code changes.
+_Avoid_: Prompt file, tool config, plugin spec
+
 
 **Agent Skill**:
 A high-level agent capability comprising a specialized system prompt, a bound set of MCP tools, and deterministic output validation criteria.
@@ -49,6 +53,10 @@ _Avoid_: Business logic, hardcoded if-statement, prompt guardrail
 **Durable Business Workflow**:
 A fault-tolerant, stateful execution unit orchestrated by Temporal that coordinates multi-system activities, signal-based approvals, and long-running timers across days or weeks.
 _Avoid_: Pipeline, batch job, background worker, script
+
+**Tenant Workflow Route**:
+A declarative mapping binding incoming operational signal patterns to pre-compiled Temporal workflows with tenant-specific execution parameters.
+_Avoid_: Event rule, workflow trigger, routing rule
 
 **Enterprise Integration**:
 A managed connection to an external enterprise application (EAM, PLM, ERP, FSM, AIP) providing authentication, rate limiting, and an MCP tool interface.
