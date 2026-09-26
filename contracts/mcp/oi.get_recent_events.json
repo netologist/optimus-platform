@@ -1,0 +1,12 @@
+{
+  "name": "oi.get_recent_events",
+  "description": "Fetch real-time IoT and operational telemetry events for an asset",
+  "inputSchema": {
+    "type": "object",
+    "required": ["tenant_id", "asset_id"],
+    "properties": {
+      "tenant_id": {"type": "string"},
+      "asset_id": {"type": "string"}
+    }
+  }
+}

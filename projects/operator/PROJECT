@@ -1,0 +1,6 @@
+domain: optimus.dev
+layout:
+  - go.kubebuilder.io/v4
+projectName: operator
+repo: github.com/optimus/projects/operator
+version: "3"

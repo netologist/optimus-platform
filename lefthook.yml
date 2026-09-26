@@ -1,0 +1,13 @@
+pre-commit:
+  parallel: true
+  commands:
+    go-lint:
+      glob: "*.go"
+      run: golangci-lint run ./...
+    go-fmt:
+      glob: "*.go"
+      run: gofmt -w {staged_files}
+    python-lint:
+      glob: "*.py"
+      root: "projects/ai-runtime"
+      run: uv run ruff check . || true

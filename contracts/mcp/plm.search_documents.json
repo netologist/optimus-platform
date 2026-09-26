@@ -1,0 +1,13 @@
+{
+  "name": "plm.search_documents",
+  "description": "Perform hybrid semantic search (pgvector + keyword) on technical engineering and service manuals",
+  "inputSchema": {
+    "type": "object",
+    "required": ["tenant_id", "query"],
+    "properties": {
+      "tenant_id": {"type": "string"},
+      "query": {"type": "string"},
+      "limit": {"type": "integer", "default": 3}
+    }
+  }
+}

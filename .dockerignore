@@ -1,0 +1,12 @@
+.git
+.github
+.idea
+.vscode
+.DS_Store
+.venv
+__pycache__
+bin/
+dist/
+.kube/
+coverage/
+*.test

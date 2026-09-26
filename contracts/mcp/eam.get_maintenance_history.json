@@ -1,0 +1,13 @@
+{
+  "name": "eam.get_maintenance_history",
+  "description": "Retrieve recent maintenance events and failures for an asset",
+  "inputSchema": {
+    "type": "object",
+    "required": ["tenant_id", "asset_id"],
+    "properties": {
+      "tenant_id": {"type": "string"},
+      "asset_id": {"type": "string"},
+      "days": {"type": "integer", "default": 30}
+    }
+  }
+}

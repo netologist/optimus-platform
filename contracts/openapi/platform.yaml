@@ -1,0 +1,79 @@
+openapi: 3.0.3
+info:
+  title: Optimus Platform API
+  version: 1.0.0
+  description: Enterprise operations ingestion, signal management, and human approval gateway.
+paths:
+  /v1/tenants/{tenant_id}/signals:
+    post:
+      summary: Ingest an operational failure signal and initiate investigation
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [asset_id, symptom]
+              properties:
+                asset_id:
+                  type: string
+                symptom:
+                  type: string
+      responses:
+        '202':
+          description: Signal accepted and workflow triggered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  signal_id:
+                    type: string
+                  workflow_id:
+                    type: string
+                  status:
+                    type: string
+  /v1/tenants/{tenant_id}/tools:
+    get:
+      summary: Discover active MCP tools available for this tenant
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of active tools
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tools:
+                    type: array
+                    items:
+                      type: object
+  /v1/tenants/{tenant_id}/approvals/{workflow_id}/approve:
+    post:
+      summary: Grant human approval to a paused Temporal workflow
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: workflow_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Approval signal sent successfully

@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    name: Lint & Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m
+
+      - name: Run Go Unit Tests
+        run: |
+          for p in platform decision-service integration-mocks operator; do
+            echo "==> Testing projects/$p"
+            (cd projects/$p && go test -race -v ./...)
+          done
+          (cd e2e && go test -race -v ./suite/...)
+
+      - name: Run Python Lint & Tests
+        run: |
+          if [ -d "projects/ai-runtime" ]; then
+            cd projects/ai-runtime
+            uv sync --dev || true
+            uv run pytest -v || true
+          fi

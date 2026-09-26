@@ -1,0 +1,12 @@
+{
+  "name": "erp.release_inventory_reservation",
+  "description": "Compensating Saga action: Release previously reserved spare parts back to available stock",
+  "inputSchema": {
+    "type": "object",
+    "required": ["tenant_id", "reservation_id"],
+    "properties": {
+      "tenant_id": {"type": "string"},
+      "reservation_id": {"type": "string"}
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "eam.get_asset",
+  "description": "Retrieve asset master record by asset ID and tenant",
+  "inputSchema": {
+    "type": "object",
+    "required": ["tenant_id", "asset_id"],
+    "properties": {
+      "tenant_id": {"type": "string"},
+      "asset_id": {"type": "string"}
+    }
+  }
+}

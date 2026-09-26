@@ -1,0 +1,45 @@
+openapi: 3.0.3
+info:
+  title: Optimus Decision Service API (SystemOne Compatible)
+  version: 1.0.0
+  description: Typed probabilistic inference and deterministic policy enforcement service.
+paths:
+  /v1/decisions:
+    post:
+      summary: Evaluate asset evidence context through Ollaya model and apply policy rules
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenant_id, asset_id, state]
+              properties:
+                tenant_id:
+                  type: string
+                asset_id:
+                  type: string
+                state:
+                  type: object
+      responses:
+        '200':
+          description: Governed decision with confidence and policy outcome
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  decision_id:
+                    type: string
+                  severity:
+                    type: string
+                  safety_risk:
+                    type: string
+                  field_visit_required:
+                    type: boolean
+                  confidence:
+                    type: number
+                  requires_approval:
+                    type: boolean
+                  policy_version:
+                    type: string

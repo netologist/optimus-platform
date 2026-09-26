@@ -1,0 +1,9 @@
+go 1.26
+
+use (
+	./e2e
+	./projects/decision-service
+	./projects/integration-mocks
+	./projects/operator
+	./projects/platform
+)

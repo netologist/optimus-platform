@@ -1,0 +1,44 @@
+apiVersion: platform.optimus.dev/v1alpha1
+kind: EnterpriseEnvironment
+metadata:
+  name: demo
+  namespace: optimus
+spec:
+  tenant: acme
+  systems:
+    - eam
+    - plm
+    - erp
+    - fsm
+    - oi
+  decisionModelRef:
+    name: laya-default
+  ai:
+    rag: true
+    mcp: true
+---
+apiVersion: platform.optimus.dev/v1alpha1
+kind: DecisionModel
+metadata:
+  name: laya-default
+  namespace: optimus
+spec:
+  ollayaRef:
+    service: ollaya
+    port: 11435
+  model: "laya"
+  keepAlive: "-1"
+  precision: "fp32"
+---
+apiVersion: platform.optimus.dev/v1alpha1
+kind: EnterpriseIntegration
+metadata:
+  name: acme-eam
+  namespace: optimus
+spec:
+  tenant: acme
+  systemType: eam
+  port: 8081
+  capabilities:
+    - eam.get_asset
+    - eam.get_maintenance_history

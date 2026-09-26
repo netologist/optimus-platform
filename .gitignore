@@ -1,0 +1,44 @@
+# Binaries & build artifacts
+bin/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# OS & IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Kubeconfig & local cluster artifacts
+.kube/
+*.kubeconfig
+
+# Go
+vendor/
+go.work.sum
+
+# Python / uv
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Test output / coverage
+coverage/
+*.coverprofile
+junit.xml
+
+# Local environment & secrets
+.env
+.env.local
+*.local

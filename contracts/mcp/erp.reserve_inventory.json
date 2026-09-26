@@ -1,0 +1,14 @@
+{
+  "name": "erp.reserve_inventory",
+  "description": "Reserve spare parts in ERP warehouse with idempotency key",
+  "inputSchema": {
+    "type": "object",
+    "required": ["tenant_id", "part_id", "quantity", "idempotency_key"],
+    "properties": {
+      "tenant_id": {"type": "string"},
+      "part_id": {"type": "string"},
+      "quantity": {"type": "integer"},
+      "idempotency_key": {"type": "string"}
+    }
+  }
+}

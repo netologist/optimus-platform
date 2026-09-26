@@ -1,0 +1,13 @@
+{
+  "name": "erp.get_inventory",
+  "description": "Check current spare part warehouse stock level and lead time",
+  "inputSchema": {
+    "type": "object",
+    "required": ["tenant_id", "part_id"],
+    "properties": {
+      "tenant_id": {"type": "string"},
+      "part_id": {"type": "string"},
+      "plant": {"type": "string"}
+    }
+  }
+}

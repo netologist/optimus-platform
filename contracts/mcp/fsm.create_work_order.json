@@ -1,0 +1,15 @@
+{
+  "name": "fsm.create_work_order",
+  "description": "Dispatch field technician and create work order in Field Service Management system",
+  "inputSchema": {
+    "type": "object",
+    "required": ["tenant_id", "asset_id", "priority", "idempotency_key"],
+    "properties": {
+      "tenant_id": {"type": "string"},
+      "asset_id": {"type": "string"},
+      "priority": {"type": "string"},
+      "description": {"type": "string"},
+      "idempotency_key": {"type": "string"}
+    }
+  }
+}
