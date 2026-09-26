@@ -22,6 +22,101 @@ data:
         editable: false
 ---
 apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-provisioning
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: grafana
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'optimus-dashboards'
+        orgId: 1
+        folder: 'Optimus Operations'
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 10
+        allowUiUpdates: true
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-optimus
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: grafana
+data:
+  optimus-overview.json: |
+    {
+      "annotations": {"list": []},
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 0,
+      "id": null,
+      "links": [],
+      "liveNow": false,
+      "panels": [
+        {
+          "title": "Platform API - Ingestion HTTP Request Rate",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "targets": [
+            {
+              "expr": "rate(promhttp_metric_handler_requests_total{job=\"optimus-platform\"}[1m])",
+              "legendFormat": "{{code}} - {{handler}}"
+            }
+          ]
+        },
+        {
+          "title": "Decision Service - Inference Request Rate",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "targets": [
+            {
+              "expr": "rate(promhttp_metric_handler_requests_total{job=\"optimus-decision-service\"}[1m])",
+              "legendFormat": "{{code}} - {{handler}}"
+            }
+          ]
+        },
+        {
+          "title": "Go Goroutines Active Count Across Microservices",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "targets": [
+            {
+              "expr": "go_goroutines{job=~\"optimus-.*\"}",
+              "legendFormat": "{{job}}"
+            }
+          ]
+        },
+        {
+          "title": "Go Heap Memory Allocated (MB)",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+          "targets": [
+            {
+              "expr": "go_memstats_alloc_bytes{job=~\"optimus-.*\"} / 1024 / 1024",
+              "legendFormat": "{{job}} (MB)"
+            }
+          ]
+        }
+      ],
+      "refresh": "5s",
+      "schemaVersion": 39,
+      "tags": ["optimus", "enterprise"],
+      "templating": {"list": []},
+      "time": {"from": "now-15m", "to": "now"},
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Optimus - Enterprise Operations Overview",
+      "version": 1
+    }
+---
+apiVersion: v1
 kind: Service
 metadata:
   name: grafana
@@ -69,6 +164,10 @@ spec:
           volumeMounts:
             - name: datasources-volume
               mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboards-prov-volume
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards-data-volume
+              mountPath: /var/lib/grafana/dashboards
           resources:
             requests:
               cpu: 50m
@@ -80,3 +179,9 @@ spec:
         - name: datasources-volume
           configMap:
             name: grafana-datasources
+        - name: dashboards-prov-volume
+          configMap:
+            name: grafana-dashboards-provisioning
+        - name: dashboards-data-volume
+          configMap:
+            name: grafana-dashboard-optimus

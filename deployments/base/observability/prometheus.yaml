@@ -8,8 +8,8 @@ metadata:
 data:
   prometheus.yml: |
     global:
-      scrape_interval: 15s
-      evaluation_interval: 15s
+      scrape_interval: 5s
+      evaluation_interval: 5s
 
     scrape_configs:
       - job_name: 'optimus-platform'
@@ -21,6 +21,16 @@ data:
         metrics_path: '/metrics'
         static_configs:
           - targets: ['decision-service.optimus.svc:8082']
+
+      - job_name: 'optimus-integration-mocks'
+        metrics_path: '/metrics'
+        static_configs:
+          - targets: ['integration-mocks.optimus.svc:8080']
+
+      - job_name: 'optimus-ollaya'
+        metrics_path: '/metrics'
+        static_configs:
+          - targets: ['ollaya.optimus.svc:11435']
 
       - job_name: 'optimus-operator'
         metrics_path: '/metrics'

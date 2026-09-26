@@ -36,7 +36,7 @@ class MCPClient:
     async def call_tool(
         self, endpoint: str, tool_name: str, arguments: dict[str, Any]
     ) -> dict[str, Any]:
-        """Call an MCP tool using standard JSON-RPC 2.0 tools/call."""
+        """Call an MCP tool using standard JSON-RPC 2.0 tools/call with trace propagation."""
         payload = {
             "jsonrpc": "2.0",
             "id": 1,
@@ -47,8 +47,15 @@ class MCPClient:
             },
         }
 
+        headers: dict[str, str] = {}
+        try:
+            from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+            TraceContextTextMapPropagator().inject(carrier=headers)
+        except Exception:
+            pass
+
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(endpoint, json=payload)
+            resp = await client.post(endpoint, json=payload, headers=headers)
             resp.raise_for_status()
             data = resp.json()
             if "error" in data:

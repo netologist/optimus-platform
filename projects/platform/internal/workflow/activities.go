@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 type Activities struct {
@@ -44,7 +47,7 @@ func (a *Activities) InvestigateFailure(ctx context.Context, input AssetFailureW
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
 	resp, err := a.httpClient.Do(req)
 	if err != nil || resp.StatusCode != http.StatusOK {
 		// Fallback deterministic simulation if offline in unit test
@@ -86,7 +89,7 @@ func (a *Activities) RunDecision(ctx context.Context, evidence *EvidenceContext)
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
 	resp, err := a.httpClient.Do(req)
 	if err != nil || resp.StatusCode != http.StatusOK {
 		// Fallback deterministic simulation
@@ -132,7 +135,7 @@ func (a *Activities) ReserveSparePart(ctx context.Context, tenantID, partID, ide
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
 	resp, err := a.httpClient.Do(req)
 	if err != nil || resp.StatusCode != http.StatusOK {
 		// Simulation fallback
@@ -180,6 +183,7 @@ func (a *Activities) ReleaseSparePartReservation(ctx context.Context, tenantID, 
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
 	_, _ = a.httpClient.Do(req)
 	return nil
 }
@@ -206,7 +210,7 @@ func (a *Activities) CreateFieldWorkOrder(ctx context.Context, tenantID, assetID
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
 	resp, err := a.httpClient.Do(req)
 	if err != nil || resp.StatusCode != http.StatusOK {
 		return &CreateWorkOrderOutput{

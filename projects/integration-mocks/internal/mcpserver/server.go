@@ -6,6 +6,11 @@ import (
 	"io"
 	"net/http"
 	"sync"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ToolDefinition defines a tool exposed via MCP
@@ -122,10 +127,22 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
+		// Start OpenTelemetry span extracting parent context from HTTP headers
+		ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+		tr := otel.Tracer("integration-mocks")
+		_, span := tr.Start(ctx, params.Name,
+			trace.WithAttributes(
+				attribute.String("mcp.tool", params.Name),
+				attribute.String("mcp.system", s.systemName),
+			),
+		)
+		defer span.End()
+
 		s.mu.Lock()
 		tool, exists := s.tools[params.Name]
 		if !exists {
 			s.mu.Unlock()
+			span.RecordError(fmt.Errorf("tool %s not found", params.Name))
 			resp.Error = map[string]any{"code": -32601, "message": fmt.Sprintf("Tool %s not found", params.Name)}
 			break
 		}
@@ -138,6 +155,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		res, err := tool.Handler(params.Arguments)
 		if err != nil {
+			span.RecordError(err)
 			resp.Error = map[string]any{"code": -32000, "message": err.Error()}
 		} else {
 			resp.Result = map[string]any{
@@ -150,7 +168,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"data": res,
 			}
 		}
-
 	default:
 		resp.Error = map[string]any{"code": -32601, "message": "Method not found"}
 	}
