@@ -14,6 +14,10 @@ _Avoid_: Alert, alarm, notification, ticket
 An isolated enterprise organization with strict data partitioning, distinct integration endpoints, custom policies, and dedicated security boundaries.
 _Avoid_: Customer, account, workspace, client
 
+**Tenant Namespace Perimeter**:
+An isolated Kubernetes namespace (`tenant-{id}`) provisioned with dedicated NetworkPolicies, ResourceQuotas, and Secret boundaries managed by the cluster-wide Optimus Operator.
+_Avoid_: Cluster slice, project room, virtual cluster
+
 **Durable Domain Event**:
 A transactional, replayable business event (e.g., work_order.created) persisted via the Transactional Outbox pattern to Redpanda with W3C trace context.
 _Avoid_: Message, notification, signal
