@@ -15,9 +15,9 @@ fi
 echo "==> 1. Installing Kubernetes Operator CRDs..."
 kubectl apply -k "${ROOT_DIR}/projects/operator/config/crd"
 
-echo "==> 2. Deploying all infrastructure + application services via Kustomize..."
-kubectl apply -k "${ROOT_DIR}/deployments/overlays/kind-dev"
-
+OVERLAY="${1:-kind-dev}"
+echo "==> 2. Deploying all infrastructure + application services via Kustomize (${OVERLAY})..."
+kubectl apply -k "${ROOT_DIR}/deployments/overlays/${OVERLAY}"
 echo "==> 3. Applying Tenant Acme environment & enterprise integrations..."
 kubectl apply -k "${ROOT_DIR}/deployments/tenants/acme"
 

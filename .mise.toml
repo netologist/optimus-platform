@@ -44,9 +44,16 @@ description = "Build all container images and push to local registry"
 run = "./scripts/build.sh"
 
 [tasks.deploy]
-description = "Deploy base infrastructure and services via Kustomize"
-run = "./scripts/deploy.sh"
+description = "Deploy base infrastructure and services via Kustomize (defaults to kind-dev)"
+run = "./scripts/deploy.sh kind-dev"
 
+[tasks."deploy:dev"]
+description = "Deploy to local Kind cluster using kind-dev overlay"
+run = "./scripts/deploy.sh kind-dev"
+
+[tasks."deploy:ci"]
+description = "Deploy to CI Kind cluster using kind-ci overlay"
+run = "./scripts/deploy.sh kind-ci"
 [tasks.crds-install]
 description = "Install Kubernetes Operator CRDs"
 run = "kubectl apply -k projects/operator/config/crd"
