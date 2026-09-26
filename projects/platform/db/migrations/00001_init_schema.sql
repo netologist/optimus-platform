@@ -93,24 +93,29 @@ ALTER TABLE outbox ENABLE ROW LEVEL SECURITY;
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE document_chunks ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS assets_tenant_isolation ON assets;
 CREATE POLICY assets_tenant_isolation ON assets
     USING (tenant_id = NULLIF(current_setting('app.current_tenant', true), ''));
 
+DROP POLICY IF EXISTS signals_tenant_isolation ON signals;
 CREATE POLICY signals_tenant_isolation ON signals
     USING (tenant_id = NULLIF(current_setting('app.current_tenant', true), ''));
 
+DROP POLICY IF EXISTS work_orders_tenant_isolation ON work_orders;
 CREATE POLICY work_orders_tenant_isolation ON work_orders
     USING (tenant_id = NULLIF(current_setting('app.current_tenant', true), ''));
 
+DROP POLICY IF EXISTS outbox_tenant_isolation ON outbox;
 CREATE POLICY outbox_tenant_isolation ON outbox
     USING (tenant_id = NULLIF(current_setting('app.current_tenant', true), ''));
 
+DROP POLICY IF EXISTS documents_tenant_isolation ON documents;
 CREATE POLICY documents_tenant_isolation ON documents
     USING (tenant_id = NULLIF(current_setting('app.current_tenant', true), ''));
 
+DROP POLICY IF EXISTS document_chunks_tenant_isolation ON document_chunks;
 CREATE POLICY document_chunks_tenant_isolation ON document_chunks
     USING (tenant_id = NULLIF(current_setting('app.current_tenant', true), ''));
-
 -- +goose Down
 -- SQL in section 'Down' is executed when this migration is reverted
 

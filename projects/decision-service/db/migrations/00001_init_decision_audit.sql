@@ -20,6 +20,7 @@ CREATE INDEX IF NOT EXISTS idx_decision_audit_tenant_asset
 
 ALTER TABLE decision_audit ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS decision_audit_tenant_isolation ON decision_audit;
 CREATE POLICY decision_audit_tenant_isolation ON decision_audit
     USING (tenant_id = NULLIF(current_setting('app.current_tenant', true), ''));
 

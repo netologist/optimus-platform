@@ -18,8 +18,11 @@ KIND_CLUSTER_NAME = "optimus"
 OLLAYA_HOST = "127.0.0.1:11435"
 KUBECONFIG = "{{config_root}}/.kube/kind-optimus.yaml"
 
+[tasks.setup]
+description = "One-shot master bootstrap: creates cluster, builds images, deploys stack, runs migrations, seeds fixtures"
+run = "./scripts/setup.sh"
+
 [tasks.bootstrap]
-description = "One-shot: install dependencies for all sub-projects"
 run = """
   for p in platform decision-service integration-mocks operator; do
     (cd projects/$p && go mod download) || true
