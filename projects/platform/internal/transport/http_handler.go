@@ -5,6 +5,10 @@ import (
 	"net/http"
 	"strings"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"github.com/optimus/projects/platform/internal/app"
 	"github.com/optimus/projects/platform/internal/tenant"
 )
@@ -67,18 +71,41 @@ func (h *Handler) routes() {
 }
 
 func (h *Handler) handleSignal(w http.ResponseWriter, r *http.Request) {
+	// Extract incoming W3C traceparent carrier
+	ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+	tr := otel.Tracer("platform-api")
+	ctx, span := tr.Start(ctx, "IngestSignal",
+		trace.WithAttributes(
+			attribute.String("http.method", r.Method),
+			attribute.String("http.path", r.URL.Path),
+		),
+	)
+	defer span.End()
+
 	var req app.IngestSignalRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		span.RecordError(err)
 		http.Error(w, `{"error":"invalid request payload"}`, http.StatusBadRequest)
 		return
 	}
 
+	span.SetAttributes(
+		attribute.String("asset_id", req.AssetID),
+		attribute.String("symptom", req.Symptom),
+	)
+
 	traceparent := r.Header.Get("traceparent")
-	resp, err := h.svc.IngestSignal(r.Context(), req, traceparent)
+	resp, err := h.svc.IngestSignal(ctx, req, traceparent)
 	if err != nil {
+		span.RecordError(err)
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
+
+	span.SetAttributes(
+		attribute.String("signal_id", resp.SignalID),
+		attribute.String("workflow_id", resp.WorkflowID),
+	)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)

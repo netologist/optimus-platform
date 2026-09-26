@@ -16,6 +16,8 @@ import (
 	internalhttp "github.com/optimus/projects/decision-service/internal/http"
 	"github.com/optimus/projects/decision-service/internal/policy"
 	"github.com/optimus/projects/decision-service/internal/systemone"
+	"github.com/optimus/projects/decision-service/internal/telemetry"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -30,6 +32,15 @@ func main() {
 	modelName := os.Getenv("DECISION_MODEL")
 	if modelName == "" {
 		modelName = "laya"
+	}
+	// 0. Initialize OpenTelemetry Tracer
+	tp, err := telemetry.InitTracer(context.Background(), "decision-service")
+	if err == nil && tp != nil {
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = tp.Shutdown(shutdownCtx)
+		}()
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -64,9 +75,13 @@ func main() {
 	svc := decision.NewService(client, engine, auditStore, modelName)
 	handler := internalhttp.NewHandler(svc)
 
+	mainMux := http.NewServeMux()
+	mainMux.Handle("/metrics", promhttp.Handler())
+	mainMux.Handle("/", handler)
+
 	addr := fmt.Sprintf(":%d", *port)
 	log.Printf("Starting Decision Service on %s (Ollaya endpoint: %s, Default Model: %s)", addr, ollayaURL, modelName)
-	if err := http.ListenAndServe(addr, handler); err != nil {
+	if err := http.ListenAndServe(addr, mainMux); err != nil {
 		log.Fatalf("Decision Service failed: %v", err)
 	}
 }

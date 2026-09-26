@@ -3,3 +3,5 @@ kind: Kustomization
 
 resources:
   - jaeger.yaml
+  - prometheus.yaml
+  - grafana.yaml

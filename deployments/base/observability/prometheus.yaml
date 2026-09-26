@@ -1,0 +1,94 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: prometheus
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    scrape_configs:
+      - job_name: 'optimus-platform'
+        metrics_path: '/metrics'
+        static_configs:
+          - targets: ['platform.optimus.svc:8080']
+
+      - job_name: 'optimus-decision-service'
+        metrics_path: '/metrics'
+        static_configs:
+          - targets: ['decision-service.optimus.svc:8082']
+
+      - job_name: 'optimus-operator'
+        metrics_path: '/metrics'
+        static_configs:
+          - targets: ['optimus-operator.optimus.svc:8080']
+
+      - job_name: 'jaeger'
+        metrics_path: '/metrics'
+        static_configs:
+          - targets: ['jaeger.optimus.svc:14269']
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: prometheus
+spec:
+  ports:
+    - name: http
+      port: 9090
+      targetPort: 9090
+  selector:
+    app.kubernetes.io/name: prometheus
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: prometheus
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.54.1
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--web.enable-lifecycle"
+          ports:
+            - containerPort: 9090
+              name: http
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/prometheus
+            - name: storage-volume
+              mountPath: /prometheus
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: config-volume
+          configMap:
+            name: prometheus-config
+        - name: storage-volume
+          emptyDir: {}

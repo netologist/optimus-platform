@@ -16,9 +16,10 @@ import (
 	"github.com/optimus/projects/platform/internal/app"
 	"github.com/optimus/projects/platform/internal/infra/postgres"
 	"github.com/optimus/projects/platform/internal/infra/temporal"
+	"github.com/optimus/projects/platform/internal/telemetry"
 	"github.com/optimus/projects/platform/internal/transport"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
-
 func main() {
 	defaultPort := 8080
 	if envPort := os.Getenv("PORT"); envPort != "" {
@@ -33,7 +34,16 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// 1. Initialize Storage (PostgreSQL with RLS or In-Memory fallback)
+	// 0. Initialize OpenTelemetry Tracer
+	tp, err := telemetry.InitTracer(context.Background(), "platform")
+	if err == nil && tp != nil {
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = tp.Shutdown(shutdownCtx)
+		}()
+	}
+	// 1. Storage setup
 	var storage app.Storage
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL != "" {
@@ -79,9 +89,14 @@ func main() {
 	svc := app.NewService(storage, app.WithWorkflowClient(wfClient))
 	handler := transport.NewHandler(svc)
 
+	// Combine Platform API routes with Prometheus metrics endpoint
+	mainMux := http.NewServeMux()
+	mainMux.Handle("/metrics", promhttp.Handler())
+	mainMux.Handle("/", handler)
+
 	addr := fmt.Sprintf(":%d", *port)
 	log.Printf("Starting Optimus Platform API on %s (docs available at http://localhost:%d/docs)", addr, *port)
-	if err := http.ListenAndServe(addr, handler); err != nil {
+	if err := http.ListenAndServe(addr, mainMux); err != nil {
 		log.Fatalf("Server exited: %v", err)
 	}
 }
