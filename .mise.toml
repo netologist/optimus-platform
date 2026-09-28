@@ -42,6 +42,26 @@ run = "./scripts/kind-create.sh"
 description = "Destroy local Kind cluster and registry"
 run = "./scripts/kind-destroy.sh"
 
+[tasks."ingress:up"]
+description = "Setup Kind ingress with TLS certificates and ingress-nginx"
+run = "./scripts/setup-kind-ingress.sh up"
+
+[tasks."ingress:all"]
+description = "Create TLS Ingresses for all deployed Optimus services"
+run = "./scripts/setup-kind-ingress.sh ingress-all"
+
+[tasks."ingress:dns"]
+description = "Setup dnsmasq wildcard DNS for *.optimus.local"
+run = "./scripts/setup-kind-ingress.sh dns"
+
+[tasks."ingress:verify"]
+description = "Verify DNS resolution and TLS Ingress endpoints"
+run = "./scripts/setup-kind-ingress.sh verify"
+
+[tasks."ingress:down"]
+description = "Teardown Kind ingress and cluster"
+run = "./scripts/setup-kind-ingress.sh down"
+
 [tasks.build]
 description = "Build all container images and push to local registry"
 run = "./scripts/build.sh"

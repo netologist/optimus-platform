@@ -52,5 +52,9 @@ data:
     help: "https://kind.sigs.k8s.io/docs/user/local-registry/"
 EOF
 
+# 5. Initialize Ingress controller and TLS certificates
+echo "==> Configuring Ingress Controller and TLS Certificates..."
+"${SCRIPT_DIR}/setup-kind-ingress.sh" up
+
 echo "==> Kind cluster '${CLUSTER_NAME}' is ready!"
 echo "    KUBECONFIG=${KUBECONFIG_PATH}"
