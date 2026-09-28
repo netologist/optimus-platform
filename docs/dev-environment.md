@@ -249,7 +249,9 @@ After the `mise run kind-create` or `mise run deploy:dev` command has run, the f
 | **Grafana** | https://grafana.optimus.local | admin / admin |
 | **Prometheus** | https://prometheus.optimus.local | Metric queries |
 | **Jaeger** | https://jaeger.optimus.local | Distributed trace viewing |
+| **Temporal UI** | https://temporal.optimus.local | Workflow runs, history and the waiting approval signal |
 | **Redpanda Admin** | https://redpanda.optimus.local | Kafka admin API |
+| **Redpanda Console** | https://redpanda-console.optimus.local | Topics, consumer groups and the events the outbox relay published |
 | **Kong API Gateway** | https://api.optimus.local/v1/ | Platform API entry point |
 | **Platform API** | https://platform.optimus.local | Direct API access |
 | **Decision Service** | https://decision.optimus.local | Decision service |
@@ -258,12 +260,12 @@ TLS certificates are stored under `~/.kind-certs/`. The `mkcert` CA is added to 
 
 ### Adding a New Service
 
-Thanks to dnsmasq, no DNS configuration is needed for a new service — just create an Ingress rule:
+`mise run ingress:all` already covers Grafana, Prometheus, Jaeger, Temporal UI, Redpanda (Admin API and Console), Kong, the Platform API and the Decision Service. For anything else, thanks to dnsmasq no DNS configuration is needed — just create an Ingress rule:
 
 ```bash
-# Example: adding the Temporal UI
-./scripts/setup-kind-ingress.sh ingress temporal-ui optimus temporal 8233 temporal.optimus.local
-# https://temporal.optimus.local is immediately reachable
+# Example: exposing a service that is not in that list
+./scripts/setup-kind-ingress.sh ingress my-tool optimus my-tool 8080 my-tool.optimus.local
+# https://my-tool.optimus.local is immediately reachable
 ```
 
 ---
@@ -345,11 +347,11 @@ The script is invoked automatically by `mise run kind-create` and `mise run depl
 
 ### Adding a New Tool Later
 
-Thanks to dnsmasq, no DNS configuration is needed for a new service — just run the `ingress` subcommand:
+Temporal UI and Redpanda Console ship in the `ingress:all` list. For a tool that is not there, thanks to dnsmasq no DNS configuration is needed — just run the `ingress` subcommand:
 
 ```bash
-./scripts/setup-kind-ingress.sh ingress temporal-ui optimus temporal 8233 temporal.optimus.local
-# https://temporal.optimus.local works immediately — no /etc/hosts or DNS change
+./scripts/setup-kind-ingress.sh ingress my-tool optimus my-tool 8080 my-tool.optimus.local
+# https://my-tool.optimus.local works immediately — no /etc/hosts or DNS change
 ```
 
 ---
@@ -512,6 +514,29 @@ dnsmasq --test -C "$(brew --prefix)/etc/dnsmasq.conf"
 # Manual debug start:
 sudo "$(brew --prefix)/sbin/dnsmasq" --no-daemon -C "$(brew --prefix)/etc/dnsmasq.conf"
 ```
+
+### A Pod Cannot Pull an Image from a Public Registry
+
+Third-party images (Redpanda, Redpanda Console, Jaeger, Grafana) are pulled by the Kind nodes
+directly, so the nodes need egress to those registries — a proxy or a firewall in front of the
+host applies to them too.
+
+```bash
+# What does the kubelet say?
+kubectl describe pod -n optimus -l app.kubernetes.io/name=redpanda-console | tail -12
+
+# If the registry is unreachable but the host already has the image, hand it to the nodes:
+docker save docker.redpanda.com/redpandadata/console:v3.12.0 -o /tmp/console.tar
+for n in optimus-worker optimus-worker2 optimus-control-plane; do
+  docker exec -i "$n" ctr -n k8s.io images import - < /tmp/console.tar
+done
+kubectl delete pod -n optimus -l app.kubernetes.io/name=redpanda-console   # retries the pull
+```
+
+`kind load docker-image` is the usual shortcut, but it fails against Docker Desktop's containerd
+image store with `content digest …: not found`; the `ctr images import` above works there. Note
+that the import lives inside the node containers, so destroying the cluster means pulling (or
+importing) again.
 
 ### Restart the Cluster from Scratch
 

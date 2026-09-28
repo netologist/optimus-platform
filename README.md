@@ -466,7 +466,9 @@ Every service is reachable over HTTPS on its own hostname, with certificates the
 | **Grafana** | https://grafana.optimus.local | admin / admin |
 | **Prometheus** | https://prometheus.optimus.local | Metric queries |
 | **Jaeger** | https://jaeger.optimus.local | Distributed traces |
+| **Temporal UI** | https://temporal.optimus.local | Workflow runs, history and the waiting approval signal |
 | **Redpanda Admin** | https://redpanda.optimus.local | Kafka admin API |
+| **Redpanda Console** | https://redpanda-console.optimus.local | Topics, consumer groups and the published events |
 
 **How it works**
 
@@ -477,7 +479,7 @@ Every service is reachable over HTTPS on its own hostname, with certificates the
 **Adding a service** requires only an Ingress — DNS and TLS are already wildcarded:
 
 ```bash
-./scripts/setup-kind-ingress.sh ingress temporal-ui optimus temporal 8233 temporal.optimus.local
+./scripts/setup-kind-ingress.sh ingress temporal-ui optimus temporal 8080 temporal.optimus.local
 # https://temporal.optimus.local works immediately
 ```
 

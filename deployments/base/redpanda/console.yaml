@@ -1,0 +1,109 @@
+# Redpanda Console — the read-side view of the event log this deployment publishes to.
+#
+# It is here for the same reason Grafana and Jaeger are: the dual-write boundary
+# (platform -> outbox -> relay -> Redpanda) is only debuggable if the events can be looked
+# at, including the traceparent header each record carries. It participates in nothing —
+# no service depends on it, and the E2E suite reads the topics directly — so it is
+# deliberately last in the dependency order and probed on its port alone.
+#
+# Configuration follows the upstream quickstart for Console v3: a YAML config file at
+# CONFIG_FILEPATH rather than the flat environment variables Console v2 took.
+# https://docs.redpanda.com/streaming/current/get-started/quick-start/
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redpanda-console
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: redpanda-console
+data:
+  config.yml: |
+    kafka:
+      # The INTERNAL listener: the console runs in-cluster, where the advertised
+      # redpanda.optimus.svc:9092 address is the one that resolves.
+      brokers:
+        - redpanda.optimus.svc:9092
+    redpanda:
+      # The Admin API is what gives the console broker and cluster details rather than only
+      # topics; without it the UI renders a partial view.
+      adminApi:
+        enabled: true
+        urls:
+          - http://redpanda.optimus.svc:9644
+    schemaRegistry:
+      enabled: true
+      urls:
+        - http://redpanda.optimus.svc:8081
+    console:
+      # Topic documentation is fetched from a GitHub repository that needs a token; with
+      # none, Console fails the clone and never binds its port. The events are the point
+      # here, not their documentation.
+      topicDocumentation:
+        enabled: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redpanda-console
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: redpanda-console
+spec:
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+  selector:
+    app.kubernetes.io/name: redpanda-console
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redpanda-console
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: redpanda-console
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redpanda-console
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redpanda-console
+    spec:
+      containers:
+        - name: redpanda-console
+          # Pinned to the tag the upstream quickstart ships, so the config file above and
+          # the image cannot drift apart.
+          image: docker.redpanda.com/redpandadata/console:v3.12.0
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: CONFIG_FILEPATH
+              value: /etc/console/config.yml
+          volumeMounts:
+            - name: config
+              mountPath: /etc/console
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+          readinessProbe:
+            # The console serves its UI whether or not Redpanda answers, and what the
+            # Ingress needs is the port being up; an HTTP probe would make this pod wait on
+            # a broker it does not own.
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: redpanda-console

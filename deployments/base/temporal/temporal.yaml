@@ -11,8 +11,8 @@ spec:
       port: 7233
       targetPort: 7233
     - name: ui
-      port: 8233
-      targetPort: 8233
+      port: 8080
+      targetPort: 8080
   selector:
     app.kubernetes.io/name: temporal
 ---
@@ -60,13 +60,18 @@ spec:
         - name: temporal-ui
           image: temporalio/ui:2.30.0
           ports:
-            - containerPort: 8233
+            # The UI server binds 8080 on its own; declaring 8233 here (and on the
+            # Service) meant nothing was listening on the advertised port, so the
+            # Ingress answered 502.
+            - containerPort: 8080
               name: ui
           env:
             - name: TEMPORAL_ADDRESS
               value: "127.0.0.1:7233"
             - name: TEMPORAL_CORS_ORIGINS
-              value: "http://localhost:8233"
+              # The browser origins the UI is reached on: the port-forward, and the
+              # Ingress host from the local development environment.
+              value: "http://localhost:8080,https://temporal.optimus.local"
           resources:
             requests:
               cpu: 50m

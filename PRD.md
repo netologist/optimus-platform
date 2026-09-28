@@ -1092,6 +1092,8 @@ flowchart TB
     Operator -.-> Observability
 ```
 
+The local development environment also runs two read-only viewers that appear in no flow above: the Temporal UI (a sidecar of the Temporal server container) and Redpanda Console (a separate deployment beside the event log). Neither is a dependency of anything — no service calls them, the E2E suite reads the Redpanda topics directly — they exist so the workflow history and the published events, traceparent headers included, can be inspected by hand (`deployments/base/redpanda/console.yaml`, `docs/dev-environment.md`).
+
 ### 18.4 C4 — Level 3: Component — AI Runtime (Python)
 
 The most architecturally interesting container, so it gets the component-level drill-down (mirrors the choice an earlier project of mine made for its own AI-heavy container):
