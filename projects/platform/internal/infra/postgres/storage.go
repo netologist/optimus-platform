@@ -133,6 +133,90 @@ func (s *Storage) SaveWorkOrder(ctx context.Context, wo *domain.WorkOrder) error
 	})
 }
 
+func (s *Storage) GetWorkOrder(ctx context.Context, tenantID, id string) (*domain.WorkOrder, error) {
+	tc, err := tenant.FromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if tenantID != tc.TenantID {
+		return nil, fmt.Errorf("RLS violation: tenant context %s does not match requested tenant %s", tc.TenantID, tenantID)
+	}
+
+	var wo domain.WorkOrder
+	err = s.withTenantTx(ctx, tc.TenantID, func(tx pgx.Tx) error {
+		q := db.New(tx)
+		row, err := q.GetWorkOrder(ctx, db.GetWorkOrderParams{
+			TenantID: tenantID,
+			ID:       id,
+		})
+		if err != nil {
+			return err
+		}
+
+		wo = domain.WorkOrder{
+			ID:             row.ID,
+			TenantID:       row.TenantID,
+			AssetID:        row.AssetID,
+			Priority:       row.Priority,
+			Status:         row.Status,
+			IdempotencyKey: row.IdempotencyKey,
+			CreatedAt:      row.CreatedAt.Time,
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &wo, nil
+}
+
+// SaveWorkOrderWithEvent writes the work order row and its domain event inside one
+// transaction. Either both land or neither does, which is what lets the relay treat a
+// missing outbox row as "no event" rather than "an event that may have been lost".
+func (s *Storage) SaveWorkOrderWithEvent(ctx context.Context, wo *domain.WorkOrder, msg *domain.OutboxMessage) error {
+	tc, err := tenant.FromContext(ctx)
+	if err != nil {
+		return err
+	}
+	if wo.TenantID != tc.TenantID {
+		return fmt.Errorf("RLS violation: tenant context %s does not match work order tenant %s", tc.TenantID, wo.TenantID)
+	}
+	if msg.TenantID != "" && msg.TenantID != tc.TenantID {
+		return fmt.Errorf("RLS violation: tenant context %s does not match outbox tenant %s", tc.TenantID, msg.TenantID)
+	}
+	msg.TenantID = tc.TenantID
+
+	return s.withTenantTx(ctx, tc.TenantID, func(tx pgx.Tx) error {
+		q := db.New(tx)
+
+		if err := q.SaveWorkOrder(ctx, db.SaveWorkOrderParams{
+			ID:             wo.ID,
+			TenantID:       wo.TenantID,
+			AssetID:        wo.AssetID,
+			Priority:       wo.Priority,
+			Status:         wo.Status,
+			IdempotencyKey: wo.IdempotencyKey,
+			CreatedAt:      pgtype.Timestamptz{Time: wo.CreatedAt, Valid: true},
+		}); err != nil {
+			return fmt.Errorf("failed to save work order: %w", err)
+		}
+
+		id, err := q.SaveOutboxMessage(ctx, db.SaveOutboxMessageParams{
+			TenantID:      msg.TenantID,
+			EventType:     msg.EventType,
+			CorrelationID: msg.CorrelationID,
+			Traceparent:   pgtype.Text{String: msg.Traceparent, Valid: msg.Traceparent != ""},
+			Payload:       msg.Payload,
+			CreatedAt:     pgtype.Timestamptz{Time: msg.CreatedAt, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("failed to save outbox message: %w", err)
+		}
+		msg.ID = id
+		return nil
+	})
+}
+
 func (s *Storage) SaveOutboxMessage(ctx context.Context, msg *domain.OutboxMessage) error {
 	tenantID := msg.TenantID
 	if tc, err := tenant.FromContext(ctx); err == nil && tc.TenantID != "" {

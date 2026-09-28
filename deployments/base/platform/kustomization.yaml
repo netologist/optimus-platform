@@ -4,3 +4,4 @@ kind: Kustomization
 resources:
   - platform.yaml
   - worker.yaml
+  - outbox-relay.yaml

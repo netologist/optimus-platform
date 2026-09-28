@@ -10,16 +10,21 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
+
+	"github.com/optimus/projects/platform/internal/app"
+	"github.com/optimus/projects/platform/internal/domain"
+	"github.com/optimus/projects/platform/internal/tenant"
 )
 
 type Activities struct {
 	aiRuntimeURL       string
 	decisionServiceURL string
 	mcpServerURL       string
+	storage            app.Storage
 	httpClient         *http.Client
 }
 
-func NewActivities(aiRuntimeURL, decisionServiceURL, mcpServerURL string) *Activities {
+func NewActivities(aiRuntimeURL, decisionServiceURL, mcpServerURL string, storage app.Storage) *Activities {
 	if aiRuntimeURL == "" {
 		aiRuntimeURL = "http://ai-runtime.optimus.svc:8000"
 	}
@@ -34,6 +39,7 @@ func NewActivities(aiRuntimeURL, decisionServiceURL, mcpServerURL string) *Activ
 		aiRuntimeURL:       aiRuntimeURL,
 		decisionServiceURL: decisionServiceURL,
 		mcpServerURL:       mcpServerURL,
+		storage:            storage,
 		httpClient:         &http.Client{Timeout: 30 * time.Second},
 	}
 }
@@ -216,24 +222,29 @@ func (a *Activities) CreateFieldWorkOrder(ctx context.Context, tenantID, assetID
 	req.Header.Set("Content-Type", "application/json")
 	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
 	resp, err := a.httpClient.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return &CreateWorkOrderOutput{
-			WorkOrderID: fmt.Sprintf("WO-%s-10423", assetID),
-			AssetID:     assetID,
-			Priority:    priority,
-		}, nil
-	}
-	defer func() { _ = resp.Body.Close() }()
 
-	var rpcResp struct {
-		Result struct {
-			Data map[string]any `json:"data"`
-		} `json:"result"`
+	// A dispatch failure must not skip persistence: the work order still exists in the
+	// platform's own records even when the FSM mock is unreachable.
+	woID := ""
+	if err == nil {
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode == http.StatusOK {
+			var rpcResp struct {
+				Result struct {
+					Data map[string]any `json:"data"`
+				} `json:"result"`
+			}
+			_ = json.NewDecoder(resp.Body).Decode(&rpcResp)
+			woID, _ = rpcResp.Result.Data["work_order_id"].(string)
+		}
 	}
-	_ = json.NewDecoder(resp.Body).Decode(&rpcResp)
-	woID, _ := rpcResp.Result.Data["work_order_id"].(string)
 	if woID == "" {
 		woID = fmt.Sprintf("WO-%s-10423", assetID)
+	}
+
+	if err := a.recordWorkOrder(ctx, tenantID, assetID, priority, idempotencyKey, woID); err != nil {
+		return nil, err
 	}
 
 	return &CreateWorkOrderOutput{
@@ -241,4 +252,57 @@ func (a *Activities) CreateFieldWorkOrder(ctx context.Context, tenantID, assetID
 		AssetID:     assetID,
 		Priority:    priority,
 	}, nil
+}
+
+// recordWorkOrder persists the work order and enqueues its work_order.created domain
+// event in a single transaction. Failing here fails the activity, so Temporal retries
+// it — which is safe because the idempotency key makes both writes idempotent.
+func (a *Activities) recordWorkOrder(ctx context.Context, tenantID, assetID, priority, idempotencyKey, woID string) error {
+	if a.storage == nil {
+		return nil
+	}
+
+	now := time.Now().UTC()
+
+	payload, err := json.Marshal(map[string]any{
+		"work_order_id":   woID,
+		"asset_id":        assetID,
+		"tenant_id":       tenantID,
+		"priority":        priority,
+		"status":          "OPEN",
+		"idempotency_key": idempotencyKey,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to marshal work_order.created payload: %w", err)
+	}
+
+	// Capture the active span as a W3C traceparent so the relay can republish the event
+	// with the trace that produced it (ADR-019).
+	carrier := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
+
+	wo := &domain.WorkOrder{
+		ID:             woID,
+		TenantID:       tenantID,
+		AssetID:        assetID,
+		Priority:       priority,
+		Status:         "OPEN",
+		IdempotencyKey: idempotencyKey,
+		CreatedAt:      now,
+	}
+
+	msg := &domain.OutboxMessage{
+		TenantID:      tenantID,
+		EventType:     "work_order.created",
+		CorrelationID: idempotencyKey,
+		Traceparent:   carrier.Get("traceparent"),
+		Payload:       payload,
+		CreatedAt:     now,
+	}
+
+	tctx := tenant.WithTenant(ctx, tenantID)
+	if err := a.storage.SaveWorkOrderWithEvent(tctx, wo, msg); err != nil {
+		return fmt.Errorf("failed to persist work order %s and its event: %w", woID, err)
+	}
+	return nil
 }

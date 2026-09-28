@@ -10,11 +10,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.temporal.io/sdk/client"
 
 	"github.com/optimus/projects/platform/internal/app"
-	"github.com/optimus/projects/platform/internal/infra/postgres"
+	"github.com/optimus/projects/platform/internal/bootstrap"
 	"github.com/optimus/projects/platform/internal/infra/temporal"
 	"github.com/optimus/projects/platform/internal/telemetry"
 	"github.com/optimus/projects/platform/internal/transport"
@@ -45,26 +44,8 @@ func main() {
 		}()
 	}
 	// 1. Storage setup
-	var storage app.Storage
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL != "" {
-		pool, err := pgxpool.New(ctx, dbURL)
-		if err != nil {
-			log.Printf("WARN: Failed to initialize Postgres pool (%v), falling back to MemoryStorage", err)
-			storage = app.NewMemoryStorage()
-		} else if err := pool.Ping(ctx); err != nil {
-			log.Printf("WARN: Failed to ping Postgres at %s (%v), falling back to MemoryStorage", dbURL, err)
-			pool.Close()
-			storage = app.NewMemoryStorage()
-		} else {
-			log.Printf("INFO: Connected to PostgreSQL with RLS support")
-			storage = postgres.NewStorage(pool)
-			defer pool.Close()
-		}
-	} else {
-		log.Println("INFO: DATABASE_URL not set, running with in-memory storage")
-		storage = app.NewMemoryStorage()
-	}
+	storage, closeStorage := bootstrap.StorageFromEnv(ctx)
+	defer closeStorage()
 
 	// 2. Initialize Temporal Workflow Client
 	var wfClient app.WorkflowClient

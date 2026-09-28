@@ -21,6 +21,8 @@ spec:
           imagePullPolicy: Always
           command: ["/app/platform-worker"]
           env:
+            - name: DATABASE_URL
+              value: "postgres://optimus:optimus_secret@postgres.optimus.svc:5432/optimus?sslmode=disable"
             - name: TEMPORAL_HOST
               value: "temporal.optimus.svc:7233"
             - name: AI_RUNTIME_URL

@@ -16,6 +16,11 @@ type Storage interface {
 	SaveSignal(ctx context.Context, sig *domain.Signal) error
 	GetSignal(ctx context.Context, tenantID, id string) (*domain.Signal, error)
 	SaveWorkOrder(ctx context.Context, wo *domain.WorkOrder) error
+	GetWorkOrder(ctx context.Context, tenantID, id string) (*domain.WorkOrder, error)
+	// SaveWorkOrderWithEvent persists a work order and its domain event in a single
+	// transaction, so the event can neither be lost nor duplicated relative to the row
+	// (ADR-017: the outbox exists precisely to avoid that dual write).
+	SaveWorkOrderWithEvent(ctx context.Context, wo *domain.WorkOrder, msg *domain.OutboxMessage) error
 	SaveOutboxMessage(ctx context.Context, msg *domain.OutboxMessage) error
 	GetUnpublishedOutboxMessages(ctx context.Context, limit int) ([]*domain.OutboxMessage, error)
 	MarkOutboxMessagePublished(ctx context.Context, id int64) error
@@ -79,6 +84,46 @@ func (m *MemoryStorage) SaveWorkOrder(ctx context.Context, wo *domain.WorkOrder)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.workOrders[wo.TenantID+":"+wo.ID] = wo
+	return nil
+}
+
+func (m *MemoryStorage) GetWorkOrder(ctx context.Context, tenantID, id string) (*domain.WorkOrder, error) {
+	tc, err := tenant.FromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if tenantID != tc.TenantID {
+		return nil, fmt.Errorf("RLS violation: tenant %s cannot access tenant %s data", tc.TenantID, tenantID)
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	wo, ok := m.workOrders[tenantID+":"+id]
+	if !ok {
+		return nil, fmt.Errorf("work order not found")
+	}
+	return wo, nil
+}
+
+func (m *MemoryStorage) SaveWorkOrderWithEvent(ctx context.Context, wo *domain.WorkOrder, msg *domain.OutboxMessage) error {
+	tc, err := tenant.FromContext(ctx)
+	if err != nil {
+		return err
+	}
+	if wo.TenantID != tc.TenantID {
+		return fmt.Errorf("RLS violation: tenant %s cannot write tenant %s data", tc.TenantID, wo.TenantID)
+	}
+	if msg.TenantID != "" && msg.TenantID != tc.TenantID {
+		return fmt.Errorf("RLS violation: tenant %s cannot write tenant %s events", tc.TenantID, msg.TenantID)
+	}
+	msg.TenantID = tc.TenantID
+
+	// Both writes happen under a single lock, mirroring the single transaction the
+	// PostgreSQL implementation uses.
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.workOrders[wo.TenantID+":"+wo.ID] = wo
+	msg.ID = int64(len(m.outbox) + 1)
+	m.outbox = append(m.outbox, msg)
 	return nil
 }
 

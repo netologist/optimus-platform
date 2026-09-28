@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
+	"github.com/optimus/projects/platform/internal/bootstrap"
 	"github.com/optimus/projects/platform/internal/telemetry"
 	"github.com/optimus/projects/platform/internal/workflow"
 )
@@ -38,10 +39,16 @@ func main() {
 
 	w := worker.New(c, "optimus-task-queue", worker.Options{})
 
+	// The worker persists work orders and their outbox events, so it needs the same
+	// tenant-aware storage the API uses.
+	storage, closeStorage := bootstrap.StorageFromEnv(context.Background())
+	defer closeStorage()
+
 	acts := workflow.NewActivities(
 		os.Getenv("AI_RUNTIME_URL"),
 		os.Getenv("DECISION_SERVICE_URL"),
 		os.Getenv("MCP_SERVER_URL"),
+		storage,
 	)
 
 	w.RegisterWorkflow(workflow.AssetFailureWorkflow)
