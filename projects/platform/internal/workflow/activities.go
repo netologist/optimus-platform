@@ -198,7 +198,7 @@ func (a *Activities) ReleaseSparePartReservation(ctx context.Context, tenantID, 
 	return nil
 }
 
-func (a *Activities) CreateFieldWorkOrder(ctx context.Context, tenantID, assetID, priority, idempotencyKey string) (*CreateWorkOrderOutput, error) {
+func (a *Activities) CreateFieldWorkOrder(ctx context.Context, tenantID, assetID, priority, idempotencyKey, traceparent string) (*CreateWorkOrderOutput, error) {
 	mcpPayload := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
@@ -243,7 +243,7 @@ func (a *Activities) CreateFieldWorkOrder(ctx context.Context, tenantID, assetID
 		woID = fmt.Sprintf("WO-%s-10423", assetID)
 	}
 
-	if err := a.recordWorkOrder(ctx, tenantID, assetID, priority, idempotencyKey, woID); err != nil {
+	if err := a.recordWorkOrder(ctx, tenantID, assetID, priority, idempotencyKey, woID, traceparent); err != nil {
 		return nil, err
 	}
 
@@ -257,7 +257,7 @@ func (a *Activities) CreateFieldWorkOrder(ctx context.Context, tenantID, assetID
 // recordWorkOrder persists the work order and enqueues its work_order.created domain
 // event in a single transaction. Failing here fails the activity, so Temporal retries
 // it — which is safe because the idempotency key makes both writes idempotent.
-func (a *Activities) recordWorkOrder(ctx context.Context, tenantID, assetID, priority, idempotencyKey, woID string) error {
+func (a *Activities) recordWorkOrder(ctx context.Context, tenantID, assetID, priority, idempotencyKey, woID, traceparent string) error {
 	if a.storage == nil {
 		return nil
 	}
@@ -276,10 +276,14 @@ func (a *Activities) recordWorkOrder(ctx context.Context, tenantID, assetID, pri
 		return fmt.Errorf("failed to marshal work_order.created payload: %w", err)
 	}
 
-	// Capture the active span as a W3C traceparent so the relay can republish the event
-	// with the trace that produced it (ADR-019).
-	carrier := propagation.MapCarrier{}
-	otel.GetTextMapPropagator().Inject(ctx, carrier)
+	// The workflow carries the traceparent from the originating HTTP request, because the
+	// worker registers no Temporal tracing interceptor and activity contexts therefore
+	// hold no span to derive it from. Fall back to the context when one is present.
+	if traceparent == "" {
+		carrier := propagation.MapCarrier{}
+		otel.GetTextMapPropagator().Inject(ctx, carrier)
+		traceparent = carrier.Get("traceparent")
+	}
 
 	wo := &domain.WorkOrder{
 		ID:             woID,
@@ -295,7 +299,7 @@ func (a *Activities) recordWorkOrder(ctx context.Context, tenantID, assetID, pri
 		TenantID:      tenantID,
 		EventType:     "work_order.created",
 		CorrelationID: idempotencyKey,
-		Traceparent:   carrier.Get("traceparent"),
+		Traceparent:   traceparent,
 		Payload:       payload,
 		CreatedAt:     now,
 	}

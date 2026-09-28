@@ -44,7 +44,13 @@ func main() {
 		}()
 	}
 	// 1. Storage setup
-	storage, closeStorage := bootstrap.StorageFromEnv(ctx)
+	storage, closeStorage, err := bootstrap.StorageFromEnv(ctx)
+	if err != nil {
+		// The API tolerates memory storage so it can still serve a local demo without a
+		// database; unlike the relay and worker it is not purely a database consumer.
+		log.Printf("WARN: %v — falling back to in-memory storage", err)
+		storage, closeStorage = app.NewMemoryStorage(), func() {}
+	}
 	defer closeStorage()
 
 	// 2. Initialize Temporal Workflow Client

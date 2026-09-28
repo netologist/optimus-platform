@@ -40,8 +40,12 @@ func main() {
 	w := worker.New(c, "optimus-task-queue", worker.Options{})
 
 	// The worker persists work orders and their outbox events, so it needs the same
-	// tenant-aware storage the API uses.
-	storage, closeStorage := bootstrap.StorageFromEnv(context.Background())
+	// tenant-aware storage the API uses. Exiting on failure lets Kubernetes restart it
+	// rather than silently dropping the work order writes.
+	storage, closeStorage, err := bootstrap.StorageFromEnv(context.Background())
+	if err != nil {
+		log.Fatalf("Unable to connect to PostgreSQL: %v", err)
+	}
 	defer closeStorage()
 
 	acts := workflow.NewActivities(

@@ -54,7 +54,7 @@ func (s *WorkflowTestSuite) TestAssetFailureWorkflow_SuccessWithApproval() {
 		PartID:        "SP-COOL-9981",
 	}, nil)
 
-	s.env.OnActivity(acts.CreateFieldWorkOrder, mock.Anything, "acme", "P-104", "P1", mock.Anything).Return(&workflow.CreateWorkOrderOutput{
+	s.env.OnActivity(acts.CreateFieldWorkOrder, mock.Anything, "acme", "P-104", "P1", mock.Anything, mock.Anything).Return(&workflow.CreateWorkOrderOutput{
 		WorkOrderID: "WO-10423",
 		AssetID:     "P-104",
 		Priority:    "P1",
@@ -111,7 +111,7 @@ func (s *WorkflowTestSuite) TestAssetFailureWorkflow_SagaCompensationOnFSMError(
 	}, nil)
 
 	// Simulate FSM permanent failure
-	s.env.OnActivity(acts.CreateFieldWorkOrder, mock.Anything, "acme", "P-104", mock.Anything, mock.Anything).Return(nil, errors.New("FSM service unavailable"))
+	s.env.OnActivity(acts.CreateFieldWorkOrder, mock.Anything, "acme", "P-104", mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("FSM service unavailable"))
 
 	// Expect Saga compensating activity
 	s.env.OnActivity(acts.ReleaseSparePartReservation, mock.Anything, "acme", "RES-9981").Return(nil)

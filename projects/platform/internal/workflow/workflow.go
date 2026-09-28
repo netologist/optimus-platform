@@ -86,7 +86,7 @@ func AssetFailureWorkflow(ctx workflow.Context, input AssetFailureWorkflowInput)
 
 	// Step 5: Create Field Work Order (FSM) with Saga Compensation
 	var woOut CreateWorkOrderOutput
-	err = workflow.ExecuteActivity(ctx, acts.CreateFieldWorkOrder, input.TenantID, input.AssetID, decision.Severity, wfRunID).Get(ctx, &woOut)
+	err = workflow.ExecuteActivity(ctx, acts.CreateFieldWorkOrder, input.TenantID, input.AssetID, decision.Severity, wfRunID, input.Traceparent).Get(ctx, &woOut)
 	if err != nil {
 		logger.Error("CreateFieldWorkOrder failed, triggering Saga compensation", "error", err)
 

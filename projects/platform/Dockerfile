@@ -1,5 +1,7 @@
-# Dockerfile for Optimus Platform API & Temporal Worker
-FROM golang:1.24-alpine AS builder
+# Dockerfile for Optimus Platform API, Temporal Worker & Outbox Relay
+# Base image must satisfy the `go` directive in go.mod, otherwise GOTOOLCHAIN=auto
+# downloads a toolchain on every build.
+FROM golang:1.26-alpine AS builder
 WORKDIR /app
 ENV CGO_ENABLED=0 GOTOOLCHAIN=auto
 COPY go.mod go.sum ./

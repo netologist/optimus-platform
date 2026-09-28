@@ -34,7 +34,12 @@ func main() {
 		}()
 	}
 
-	storage, closeStorage := bootstrap.StorageFromEnv(ctx)
+	storage, closeStorage, err := bootstrap.StorageFromEnv(ctx)
+	if err != nil {
+		// Without a database the relay has nothing to poll; exiting lets Kubernetes
+		// restart it with backoff instead of running as a silent no-op.
+		log.Fatalf("Unable to connect to PostgreSQL: %v", err)
+	}
 	defer closeStorage()
 
 	publisher, closePublisher := buildPublisher(ctx)

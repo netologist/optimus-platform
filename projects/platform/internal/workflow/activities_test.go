@@ -16,7 +16,9 @@ func TestCreateFieldWorkOrderPersistsRowAndEvent(t *testing.T) {
 	// Port 1 refuses connections, so the activity exercises its dispatch-failure path.
 	acts := workflow.NewActivities("", "", "http://127.0.0.1:1", storage)
 
-	out, err := acts.CreateFieldWorkOrder(context.Background(), "acme", "P-104", "P1", "wf-run-123")
+	const traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+
+	out, err := acts.CreateFieldWorkOrder(context.Background(), "acme", "P-104", "P1", "wf-run-123", traceparent)
 	if err != nil {
 		t.Fatalf("CreateFieldWorkOrder returned error: %v", err)
 	}
@@ -53,6 +55,10 @@ func TestCreateFieldWorkOrderPersistsRowAndEvent(t *testing.T) {
 	if pending[0].TenantID != "acme" {
 		t.Errorf("expected tenant acme on the event, got %s", pending[0].TenantID)
 	}
+	// The originating request's trace must survive so consumers continue the same trace.
+	if pending[0].Traceparent != traceparent {
+		t.Errorf("expected traceparent %s on the event, got %q", traceparent, pending[0].Traceparent)
+	}
 }
 
 // Without storage the activity must still dispatch, so the worker can run in modes that
@@ -60,7 +66,7 @@ func TestCreateFieldWorkOrderPersistsRowAndEvent(t *testing.T) {
 func TestCreateFieldWorkOrderWithoutStorageStillDispatches(t *testing.T) {
 	acts := workflow.NewActivities("", "", "http://127.0.0.1:1", nil)
 
-	out, err := acts.CreateFieldWorkOrder(context.Background(), "acme", "P-104", "P1", "wf-run-456")
+	out, err := acts.CreateFieldWorkOrder(context.Background(), "acme", "P-104", "P1", "wf-run-456", "")
 	if err != nil {
 		t.Fatalf("CreateFieldWorkOrder returned error: %v", err)
 	}
