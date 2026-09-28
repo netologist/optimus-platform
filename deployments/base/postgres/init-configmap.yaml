@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: postgres
+data:
+  # docker-entrypoint-initdb.d: runs only when the data directory is empty (first install).
+  # Thanks to the PVC this script runs once and is skipped on subsequent starts.
+  00-init-databases.sql: |
+    -- Temporal expects its own databases; the postgres entrypoint prepares them.
+    SELECT 'CREATE DATABASE temporal OWNER optimus'
+      WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'temporal')\gexec
+    SELECT 'CREATE DATABASE temporal_visibility OWNER optimus'
+      WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'temporal_visibility')\gexec

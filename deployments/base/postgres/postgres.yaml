@@ -18,6 +18,20 @@ spec:
   selector:
     app.kubernetes.io/name: postgres
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: postgres
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -27,6 +41,8 @@ metadata:
     app.kubernetes.io/name: postgres
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: postgres
@@ -49,6 +65,14 @@ spec:
               value: "optimus_secret"
             - name: POSTGRES_DB
               value: "optimus"
+            - name: PGDATA
+              value: "/var/lib/postgresql/data/pgdata"
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            - name: postgres-init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
           resources:
             requests:
               cpu: 100m
@@ -66,3 +90,10 @@ spec:
               command: ["pg_isready", "-U", "optimus", "-d", "optimus"]
             initialDelaySeconds: 15
             periodSeconds: 10
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-data
+        - name: postgres-init
+          configMap:
+            name: postgres-init

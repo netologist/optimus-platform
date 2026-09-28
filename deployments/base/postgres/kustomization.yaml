@@ -3,5 +3,6 @@ kind: Kustomization
 
 resources:
   - postgres.yaml
+  - init-configmap.yaml
   - migration-job.yaml
   - seed-job.yaml
