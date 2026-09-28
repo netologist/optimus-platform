@@ -22,6 +22,13 @@ func NewClient(tc client.Client) *Client {
 	}
 }
 
+// Close releases the connections held by the underlying Temporal client.
+func (c *Client) Close() {
+	if c.tc != nil {
+		c.tc.Close()
+	}
+}
+
 func (c *Client) StartAssetFailureWorkflow(ctx context.Context, workflowID, tenantID, assetID, symptom, traceparent string) error {
 	if c.tc == nil {
 		return nil

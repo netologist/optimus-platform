@@ -10,11 +10,8 @@ import (
 	"strconv"
 	"time"
 
-	"go.temporal.io/sdk/client"
-
 	"github.com/optimus/projects/platform/internal/app"
 	"github.com/optimus/projects/platform/internal/bootstrap"
-	"github.com/optimus/projects/platform/internal/infra/temporal"
 	"github.com/optimus/projects/platform/internal/telemetry"
 	"github.com/optimus/projects/platform/internal/transport"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -31,7 +28,9 @@ func main() {
 	port := flag.Int("port", defaultPort, "HTTP server port")
 	flag.Parse()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Startup budget covers the dependency retries below: the database, then Temporal,
+	// which is routinely the last dependency to become ready.
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
 	// 0. Initialize OpenTelemetry Tracer
@@ -46,32 +45,22 @@ func main() {
 	// 1. Storage setup
 	storage, closeStorage, err := bootstrap.StorageFromEnv(ctx)
 	if err != nil {
-		// The API tolerates memory storage so it can still serve a local demo without a
-		// database; unlike the relay and worker it is not purely a database consumer.
-		log.Printf("WARN: %v — falling back to in-memory storage", err)
-		storage, closeStorage = app.NewMemoryStorage(), func() {}
+		// StorageFromEnv only fails when DATABASE_URL is set but unreachable, and serving
+		// from memory then answers the API's own read endpoints — the audit trail among
+		// them — out of a store no other process can see. Exiting lets Kubernetes restart
+		// the pod once the database accepts connections.
+		log.Fatalf("Unable to connect to PostgreSQL: %v", err)
 	}
 	defer closeStorage()
 
 	// 2. Initialize Temporal Workflow Client
-	var wfClient app.WorkflowClient
-	temporalHost := os.Getenv("TEMPORAL_HOST")
-	if temporalHost != "" {
-		tc, err := client.Dial(client.Options{
-			HostPort: temporalHost,
-		})
-		if err != nil {
-			log.Printf("WARN: Unable to dial Temporal at %s (%v), falling back to NoopClient", temporalHost, err)
-			wfClient = temporal.NewNoopClient()
-		} else {
-			log.Printf("INFO: Connected to Temporal cluster at %s", temporalHost)
-			wfClient = temporal.NewClient(tc)
-			defer tc.Close()
-		}
-	} else {
-		log.Println("INFO: TEMPORAL_HOST not set, running with NoopClient")
-		wfClient = temporal.NewNoopClient()
+	wfClient, closeWorkflowClient, err := bootstrap.WorkflowClientFromEnv(ctx)
+	if err != nil {
+		// A no-op workflow client still answers every ingest and approval with success
+		// while nothing durable happens, so an unreachable Temporal must not be survived.
+		log.Fatalf("Unable to connect to Temporal: %v", err)
 	}
+	defer closeWorkflowClient()
 
 	// 3. Assemble Service and Transport
 	svc := app.NewService(storage, app.WithWorkflowClient(wfClient))
