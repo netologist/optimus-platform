@@ -54,6 +54,14 @@ run = "./scripts/setup-kind-ingress.sh ingress-all"
 description = "Setup dnsmasq wildcard DNS for *.optimus.local"
 run = "./scripts/setup-kind-ingress.sh dns"
 
+[tasks."ingress:certs"]
+description = "Issue or renew the *.optimus.local wildcard certificate and sync it into the cluster"
+run = "./scripts/setup-kind-ingress.sh certs"
+
+[tasks."ingress:certs-force"]
+description = "Force-regenerate the wildcard certificate (drops the existing key pair)"
+run = "./scripts/setup-kind-ingress.sh certs --force"
+
 [tasks."ingress:verify"]
 description = "Verify DNS resolution and TLS Ingress endpoints"
 run = "./scripts/setup-kind-ingress.sh verify"
