@@ -1,1 +1,0 @@
-scripts/setup-kind-ingress.sh
