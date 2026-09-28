@@ -2,11 +2,13 @@ package asset_failure_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -22,6 +24,8 @@ func TestAssetFailureScenario(t *testing.T) {
 var _ = Describe("Asset failure: Pump P-104 at Manchester plant", func() {
 	var (
 		client   *helpers.TestClient
+		kafka    *helpers.KafkaClient
+		jaeger   *helpers.JaegerClient
 		platform *httptest.Server
 		decision *httptest.Server
 		mocks    *httptest.Server
@@ -34,6 +38,8 @@ var _ = Describe("Asset failure: Pump P-104 at Manchester plant", func() {
 		if os.Getenv("LIVE_CLUSTER") == "true" {
 			isLive = true
 			client = helpers.NewTestClient()
+			kafka = helpers.NewKafkaClient()
+			jaeger = helpers.NewJaegerClient()
 			return
 		}
 
@@ -92,7 +98,6 @@ var _ = Describe("Asset failure: Pump P-104 at Manchester plant", func() {
 		}))
 
 		// Mock Enterprise Systems server
-		// TODO: In production, verify consumer group offset commit in Redpanda for domain events
 		mocks = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			if r.URL.Path == "/call-log" {
@@ -134,8 +139,7 @@ var _ = Describe("Asset failure: Pump P-104 at Manchester plant", func() {
 		Expect(len(toolsList)).To(BeNumerically(">=", 5))
 
 		By("2. submitting the operational signal with W3C traceparent")
-		// TODO: In production, verify OpenTelemetry trace ID propagation in Jaeger span collector
-		traceparent := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+		traceparent := helpers.NewTraceparent()
 		resp, err := client.IngestSignal("acme", "P-104", "repeated overheating", traceparent)
 
 		Expect(err).To(BeNil())
@@ -189,6 +193,59 @@ var _ = Describe("Asset failure: Pump P-104 at Manchester plant", func() {
 				"erp.get_inventory",
 				"fsm.create_work_order",
 			))
+			return
 		}
+
+		// The remaining assertions need the real stack: a Temporal worker to run the
+		// workflow, the relay to publish, and Jaeger to have collected the spans.
+		ctx := context.Background()
+
+		By("6. verifying the work order event was published to Redpanda")
+		// The event is keyed by the workflow id, the same correlation handle the signal
+		// event uses, so the whole run is addressable by one id.
+		event, err := kafka.WaitForEvent(ctx, "events.work_order.created", workflowID, 45*time.Second)
+		Expect(err).To(BeNil(), "work_order.created never reached Redpanda")
+		Expect(event.Key).To(Equal(workflowID))
+
+		var woPayload map[string]any
+		Expect(json.Unmarshal(event.Value, &woPayload)).To(Succeed())
+		Expect(woPayload["tenant_id"]).To(Equal("acme"))
+		Expect(woPayload["asset_id"]).To(Equal("P-104"))
+		Expect(woPayload["work_order_id"]).ToNot(BeEmpty())
+		Expect(woPayload["status"]).To(Equal("OPEN"))
+
+		By("7. verifying the event carries the originating W3C traceparent")
+		Expect(event.Header("traceparent")).To(Equal(traceparent),
+			"the Kafka record must carry the trace of the request that caused it")
+
+		By("8. verifying the audit trail joins the signal and the work order")
+		trail, err := client.GetAuditTrail("acme", workflowID)
+		Expect(err).To(BeNil())
+		Expect(trail).To(HaveLen(2), "one workflow should yield exactly a signal and a work order event")
+
+		eventTypes := []string{}
+		for _, e := range trail {
+			eventTypes = append(eventTypes, e.EventType)
+			Expect(e.CorrelationID).To(Equal(workflowID))
+			Expect(e.Published).To(BeTrue(), "every audit entry should have been delivered to Redpanda")
+		}
+		Expect(eventTypes).To(Equal([]string{"signal.received", "work_order.created"}))
+
+		By("9. verifying the decision audit persisted the policy version that governed it")
+		decisionID, _ := decData["decision_id"].(string)
+		Expect(decisionID).ToNot(BeEmpty())
+		decAudit, err := client.GetDecisionAudit("acme", decisionID)
+		Expect(err).To(BeNil())
+		Expect(decAudit.PolicyVersion).To(Equal("policy_v1"))
+		Expect(decAudit.RequiresApproval).To(BeTrue())
+
+		By("10. verifying the trace spans services end to end")
+		// These spans are the evidence that the trace survived into the workflow: without
+		// an explicit traceparent the worker's activity contexts carry no span at all, so
+		// each of these would be missing or land in a disconnected trace of its own.
+		trace, err := jaeger.WaitForTrace(ctx, "platform", workflowID, 30*time.Second, time.Hour,
+			"IngestSignal", "RunDecision", "fsm.create_work_order")
+		Expect(err).To(BeNil(), "trace never spanned the expected services")
+		Expect(trace.HasAllSpans("IngestSignal", "RunDecision", "fsm.create_work_order")).To(BeTrue())
 	})
 })

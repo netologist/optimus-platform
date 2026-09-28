@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 )
@@ -96,4 +97,83 @@ func (c *TestClient) GetMockCallLog() ([]map[string]any, error) {
 	body, _ := io.ReadAll(resp.Body)
 	_ = json.Unmarshal(body, &logs)
 	return logs, nil
+}
+
+// AuditEntry is one node of the platform's business-event trail.
+type AuditEntry struct {
+	ID            int64          `json:"id"`
+	EventType     string         `json:"event_type"`
+	CorrelationID string         `json:"correlation_id"`
+	Traceparent   string         `json:"traceparent"`
+	Payload       map[string]any `json:"payload"`
+	Published     bool           `json:"published"`
+	CreatedAt     time.Time      `json:"created_at"`
+}
+
+// GetAuditTrail fetches the tenant's audit trail, optionally filtered to one workflow id.
+func (c *TestClient) GetAuditTrail(tenantID, correlationID string) ([]AuditEntry, error) {
+	endpoint := fmt.Sprintf("%s/v1/tenants/%s/audit", c.PlatformURL, tenantID)
+	if correlationID != "" {
+		endpoint += "?correlation_id=" + url.QueryEscape(correlationID)
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, endpoint, nil)
+	req.Header.Set("X-Tenant-ID", tenantID)
+
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("audit request returned HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	var trail struct {
+		TenantID string       `json:"tenant_id"`
+		Entries  []AuditEntry `json:"entries"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&trail); err != nil {
+		return nil, err
+	}
+	return trail.Entries, nil
+}
+
+// DecisionAudit is the persisted decision record, including the raw model answer and the
+// policy version that governed it.
+type DecisionAudit struct {
+	DecisionID       string         `json:"decision_id"`
+	TenantID         string         `json:"tenant_id"`
+	AssetID          string         `json:"asset_id"`
+	Model            string         `json:"model"`
+	PolicyVersion    string         `json:"policy_version"`
+	RequiresApproval bool           `json:"requires_approval"`
+	GovernedDecision map[string]any `json:"governed_decision"`
+}
+
+// GetDecisionAudit reads a persisted decision back from the decision service.
+func (c *TestClient) GetDecisionAudit(tenantID, decisionID string) (*DecisionAudit, error) {
+	url := fmt.Sprintf("%s/v1/tenants/%s/decisions/%s", c.DecisionURL, tenantID, decisionID)
+
+	req, _ := http.NewRequest(http.MethodGet, url, nil)
+	req.Header.Set("X-Tenant-ID", tenantID)
+
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("decision audit request returned HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	var rec DecisionAudit
+	if err := json.NewDecoder(resp.Body).Decode(&rec); err != nil {
+		return nil, err
+	}
+	return &rec, nil
 }

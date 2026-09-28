@@ -10,6 +10,12 @@ spec:
     - name: kafka
       port: 9092
       targetPort: 9092
+    # Second listener advertised as localhost, so a client reaching Redpanda through
+    # `kubectl port-forward` (the live E2E suite, a locally run relay) receives metadata
+    # it can actually connect back to instead of the in-cluster service DNS name.
+    - name: kafka-external
+      port: 19092
+      targetPort: 19092
     - name: admin
       port: 9644
       targetPort: 9644
@@ -48,11 +54,13 @@ spec:
             - --reserve-memory=0M
             - --node-id=0
             - --check=false
-            - --kafka-addr=PLAINTEXT://0.0.0.0:9092
-            - --advertise-kafka-addr=PLAINTEXT://redpanda.optimus.svc:9092
+            - --kafka-addr=INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:19092
+            - --advertise-kafka-addr=INTERNAL://redpanda.optimus.svc:9092,EXTERNAL://localhost:19092
           ports:
             - containerPort: 9092
               name: kafka
+            - containerPort: 19092
+              name: kafka-external
             - containerPort: 9644
               name: admin
           resources:
