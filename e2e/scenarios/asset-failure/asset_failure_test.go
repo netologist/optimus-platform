@@ -200,25 +200,50 @@ var _ = Describe("Asset failure: Pump P-104 at Manchester plant", func() {
 		// workflow, the relay to publish, and Jaeger to have collected the spans.
 		ctx := context.Background()
 
-		By("6. verifying the work order event was published to Redpanda")
-		// The event is keyed by the workflow id, the same correlation handle the signal
-		// event uses, so the whole run is addressable by one id.
-		event, err := kafka.WaitForEvent(ctx, "events.work_order.created", workflowID, 45*time.Second)
+		By("6. verifying the work order event reached Redpanda exactly once")
+		// Consuming from the start of the topic is what makes the delivery count
+		// meaningful: a second record under the same key is a duplicate the relay
+		// produced, not something the test's own read position invented.
+		woEvents, err := kafka.WaitForEvents(ctx, "events.work_order.created", workflowID, 45*time.Second, 2*time.Second)
 		Expect(err).To(BeNil(), "work_order.created never reached Redpanda")
-		Expect(event.Key).To(Equal(workflowID))
+		Expect(woEvents).To(HaveLen(1), "the outbox relay must deliver the work order event once")
+
+		woEvent := woEvents[0]
+		Expect(woEvent.Key).To(Equal(workflowID))
 
 		var woPayload map[string]any
-		Expect(json.Unmarshal(event.Value, &woPayload)).To(Succeed())
+		Expect(json.Unmarshal(woEvent.Value, &woPayload)).To(Succeed())
 		Expect(woPayload["tenant_id"]).To(Equal("acme"))
 		Expect(woPayload["asset_id"]).To(Equal("P-104"))
 		Expect(woPayload["work_order_id"]).ToNot(BeEmpty())
 		Expect(woPayload["status"]).To(Equal("OPEN"))
 
-		By("7. verifying the event carries the originating W3C traceparent")
-		Expect(event.Header("traceparent")).To(Equal(traceparent),
+		By("7. verifying the signal event reached Redpanda on the same correlation id, first")
+		// The run is addressable by one id only if the ingestion event carries the same
+		// key, and the work order that id produced must be published after it.
+		sigEvents, err := kafka.WaitForEvents(ctx, "events.signal.received", workflowID, 30*time.Second, 2*time.Second)
+		Expect(err).To(BeNil(), "signal.received never reached Redpanda")
+		Expect(sigEvents).To(HaveLen(1), "the outbox relay must deliver the signal event once")
+
+		sigEvent := sigEvents[0]
+		Expect(sigEvent.Key).To(Equal(workflowID))
+		Expect(sigEvent.Header("traceparent")).To(Equal(traceparent),
+			"the signal event must carry the trace that started the run")
+		Expect(sigEvent.Timestamp.After(woEvent.Timestamp)).To(BeFalse(),
+			"the signal was published after the work order it produced")
+
+		var sigPayload map[string]any
+		Expect(json.Unmarshal(sigEvent.Value, &sigPayload)).To(Succeed())
+		Expect(sigPayload["tenant_id"]).To(Equal("acme"))
+		Expect(sigPayload["asset_id"]).To(Equal("P-104"))
+		Expect(sigPayload["workflow_id"]).To(Equal(workflowID))
+		Expect(sigPayload["signal_id"]).To(Equal(resp["signal_id"]))
+
+		By("8. verifying the work order event carries the originating W3C traceparent")
+		Expect(woEvent.Header("traceparent")).To(Equal(traceparent),
 			"the Kafka record must carry the trace of the request that caused it")
 
-		By("8. verifying the audit trail joins the signal and the work order")
+		By("9. verifying the audit trail joins the signal and the work order")
 		trail, err := client.GetAuditTrail("acme", workflowID)
 		Expect(err).To(BeNil())
 		Expect(trail).To(HaveLen(2), "one workflow should yield exactly a signal and a work order event")
@@ -231,7 +256,7 @@ var _ = Describe("Asset failure: Pump P-104 at Manchester plant", func() {
 		}
 		Expect(eventTypes).To(Equal([]string{"signal.received", "work_order.created"}))
 
-		By("9. verifying the decision audit persisted the policy version that governed it")
+		By("10. verifying the decision audit persisted the policy version that governed it")
 		decisionID, _ := decData["decision_id"].(string)
 		Expect(decisionID).ToNot(BeEmpty())
 		decAudit, err := client.GetDecisionAudit("acme", decisionID)
@@ -239,7 +264,7 @@ var _ = Describe("Asset failure: Pump P-104 at Manchester plant", func() {
 		Expect(decAudit.PolicyVersion).To(Equal("policy_v1"))
 		Expect(decAudit.RequiresApproval).To(BeTrue())
 
-		By("10. verifying the trace spans services end to end")
+		By("11. verifying the trace spans services end to end")
 		// These spans are the evidence that the trace survived into the workflow: without
 		// an explicit traceparent the worker's activity contexts carry no span at all, so
 		// each of these would be missing or land in a disconnected trace of its own.

@@ -362,10 +362,21 @@ If the FSM service returns a permanent error (e.g. the technician pool crashes):
 
 ## 9. Step 7: Final Verification (Acceptance Assertions)
 
-At the end of the run, the acceptance test (`e2e/scenarios/asset-failure/asset_failure_test.go`) performs the following strict assertions:
+The acceptance test (`e2e/scenarios/asset-failure/asset_failure_test.go`) runs in two modes:
+
+* **self-contained** (`go test -tags=e2e ./scenarios/...`): the platform, decision and mock
+  endpoints are `httptest` servers, so only the typed payloads and the MCP call log are asserted.
+* **live** (`LIVE_CLUSTER=true`, driven by `scripts/test-e2e-live.sh`): the same assertions, plus
+  the ones that need the real stack — a Temporal worker to run the workflow, the outbox relay to
+  publish, and Jaeger to have collected the spans. The script port-forwards platform (`18080`),
+  integration-mocks (`18081`), decision-service (`18082`), Redpanda's **EXTERNAL** listener
+  (`19092`) and Jaeger (`16686`), and refuses to start the suite when a tunnel is not usable, so a
+  missing tunnel is reported there rather than surfacing as a missing event.
+
+Every assertion is structural — typed fields, event records, spans — never a substring of generated prose.
 
 ```go
-// 1. Verify the decision is typed and calibrated (never a free-form text substring check)
+// 1. The decision is typed and calibrated (both modes)
 Expect(decData["severity"]).To(Equal("P1"))
 Expect(decData["safety_risk"]).To(Equal("HIGH"))
 Expect(decData["field_visit_required"]).To(BeTrue())
@@ -373,7 +384,7 @@ Expect(decData["requires_approval"]).To(BeTrue())
 Expect(decData["confidence"]).To(BeNumerically(">=", 0.90))
 Expect(decData["policy_version"]).To(Equal("policy_v1"))
 
-// 2. Verify the mock services called exactly the expected MCP tools
+// 2. The mock enterprise systems recorded exactly the expected MCP tools (both modes)
 callLogs, _ := client.GetMockCallLog()
 Expect(callLogs).To(ContainElements(
     HaveKeyWithValue("tool", "eam.get_maintenance_history"),
@@ -382,6 +393,37 @@ Expect(callLogs).To(ContainElements(
     HaveKeyWithValue("tool", "fsm.create_work_order"),
 ))
 
-// 3. Verify the W3C Trace ID is preserved end to end
-Expect(outboxRecord.Traceparent).To(Equal("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"))
+// 3. The work order event was delivered to Redpanda exactly once, keyed by the workflow id,
+//    carrying the traceparent of the request that caused it (live)
+woEvents, err := kafka.WaitForEvents(ctx, "events.work_order.created", workflowID, 45*time.Second, 2*time.Second)
+Expect(err).To(BeNil())
+Expect(woEvents).To(HaveLen(1)) // a redelivery is a relay duplicate, not a tolerated extra
+Expect(woEvents[0].Key).To(Equal(workflowID))
+Expect(woEvents[0].Header("traceparent")).To(Equal(traceparent))
+
+// 4. The signal event carries the same correlation id and was published before the work order (live)
+Expect(sigEvents).To(HaveLen(1))
+Expect(sigEvents[0].Key).To(Equal(workflowID))
+Expect(sigEvents[0].Timestamp.After(woEvents[0].Timestamp)).To(BeFalse())
+
+// 5. The audit trail joins both events under one correlation id and reports them delivered (live)
+Expect(trail).To(HaveLen(2))
+Expect(eventTypes).To(Equal([]string{"signal.received", "work_order.created"}))
+Expect(e.CorrelationID).To(Equal(workflowID))
+Expect(e.Published).To(BeTrue())
+
+// 6. The decision audit kept the policy version that governed the decision (live)
+decAudit, _ := client.GetDecisionAudit("acme", decisionID)
+Expect(decAudit.PolicyVersion).To(Equal("policy_v1"))
+Expect(decAudit.RequiresApproval).To(BeTrue())
+
+// 7. The trace spans services end to end (live)
+trace, err := jaeger.WaitForTrace(ctx, "platform", workflowID, 30*time.Second, time.Hour,
+    "IngestSignal", "RunDecision", "fsm.create_work_order")
+Expect(err).To(BeNil())
 ```
+
+The Kafka consumer proves the brokers answer before it waits for an event, so an unreachable
+broker fails immediately with `cannot reach Redpanda at [...]` instead of a timeout, and it reports
+broker errors separately from "no matching record yet".
+

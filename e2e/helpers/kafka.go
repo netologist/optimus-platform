@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -18,6 +19,9 @@ type Event struct {
 	Headers   map[string]string
 	Partition int32
 	Offset    int64
+	// Timestamp is the producer's clock as recorded by the broker, so the order the relay
+	// published in is observable independently of when this process read the record.
+	Timestamp time.Time
 }
 
 // Header returns the value of a record header, or "" when absent.
@@ -25,9 +29,9 @@ func (e *Event) Header(key string) string {
 	return e.Headers[key]
 }
 
-// KafkaClient consumes the domain events the outbox relay publishes. It replaces the
-// previous practice of asserting only on MCP call logs, which could not tell whether an
-// event ever left the platform.
+// KafkaClient consumes the domain events the outbox relay publishes. Asserting on these
+// records rather than on the API's intent is what tells a delivered event from a promised
+// one.
 type KafkaClient struct {
 	brokers []string
 }
@@ -49,10 +53,13 @@ func NewKafkaClient() *KafkaClient {
 	return &KafkaClient{brokers: brokers}
 }
 
-// WaitForEvent consumes topic from the beginning until a record with the given key
-// appears, or the timeout elapses. Reading from the start keeps the assertion independent
-// of how quickly the relay published relative to when the test began consuming.
-func (k *KafkaClient) WaitForEvent(ctx context.Context, topic, key string, timeout time.Duration) (*Event, error) {
+// WaitForEvents consumes topic from the beginning and returns every record carrying the
+// given key. It returns once the first match has arrived and no further match has appeared
+// for settle, so a redelivery lands in the result instead of being missed.
+//
+// Broker reachability is proven before the wait begins: a port-forward that never came up
+// must say so, rather than surface as a missing event once the timeout expires.
+func (k *KafkaClient) WaitForEvents(ctx context.Context, topic, key string, timeout, settle time.Duration) ([]Event, error) {
 	consumer, err := kgo.NewClient(
 		kgo.SeedBrokers(k.brokers...),
 		kgo.ConsumeTopics(topic),
@@ -63,44 +70,61 @@ func (k *KafkaClient) WaitForEvent(ctx context.Context, topic, key string, timeo
 	}
 	defer consumer.Close()
 
+	pingCtx, cancelPing := context.WithTimeout(ctx, 5*time.Second)
+	err = consumer.Ping(pingCtx)
+	cancelPing()
+	if err != nil {
+		return nil, fmt.Errorf("cannot reach Redpanda at %v: %w", k.brokers, err)
+	}
+
 	deadline := time.Now().Add(timeout)
-	var lastErr error
+	lastArrival := time.Now()
+	var matches []Event
+	var lastBrokerErr error
 
 	for time.Now().Before(deadline) {
-		pollCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		pollCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		fetches := consumer.PollFetches(pollCtx)
 		cancel()
 
-		if errs := fetches.Errors(); len(errs) > 0 {
-			lastErr = errs[0].Err
+		for _, fetchErr := range fetches.Errors() {
+			// An empty poll ends on our own deadline; that is not a broker fault, and
+			// reporting it as one would hide the faults that are.
+			if !errors.Is(fetchErr.Err, context.DeadlineExceeded) && !errors.Is(fetchErr.Err, context.Canceled) {
+				lastBrokerErr = fetchErr.Err
+			}
 		}
 
-		var match *Event
 		fetches.EachRecord(func(r *kgo.Record) {
-			if match != nil || string(r.Key) != key {
+			if string(r.Key) != key {
 				return
 			}
 			headers := make(map[string]string, len(r.Headers))
 			for _, h := range r.Headers {
 				headers[h.Key] = string(h.Value)
 			}
-			match = &Event{
+			matches = append(matches, Event{
 				Topic:     r.Topic,
 				Key:       string(r.Key),
 				Value:     r.Value,
 				Headers:   headers,
 				Partition: r.Partition,
 				Offset:    r.Offset,
-			}
+				Timestamp: r.Timestamp,
+			})
+			lastArrival = time.Now()
 		})
 
-		if match != nil {
-			return match, nil
+		if len(matches) > 0 && time.Since(lastArrival) >= settle {
+			return matches, nil
 		}
 	}
 
-	if lastErr != nil {
-		return nil, fmt.Errorf("no event with key %q on topic %s within %s (last error: %w)", key, topic, timeout, lastErr)
+	if len(matches) > 0 {
+		return matches, nil
+	}
+	if lastBrokerErr != nil {
+		return nil, fmt.Errorf("no event with key %q on topic %s within %s (broker error: %w)", key, topic, timeout, lastBrokerErr)
 	}
 	return nil, fmt.Errorf("no event with key %q on topic %s within %s", key, topic, timeout)
 }
