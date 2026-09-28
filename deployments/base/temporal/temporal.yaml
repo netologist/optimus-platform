@@ -66,8 +66,11 @@ spec:
             - containerPort: 8080
               name: ui
           env:
+            # Not 127.0.0.1: the auto-setup server binds the pod IP (10.244.x.y:7233), so
+            # a loopback dial is refused and every UI API call answers 503 while the static
+            # page still loads. The Service address is what the API and the worker dial too.
             - name: TEMPORAL_ADDRESS
-              value: "127.0.0.1:7233"
+              value: "temporal.optimus.svc:7233"
             - name: TEMPORAL_CORS_ORIGINS
               # The browser origins the UI is reached on: the port-forward, and the
               # Ingress host from the local development environment.
