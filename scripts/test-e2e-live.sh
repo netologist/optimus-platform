@@ -71,6 +71,8 @@ export KAFKA_BROKERS="127.0.0.1:19092"
 export JAEGER_URL="http://127.0.0.1:16686"
 
 cd "${ROOT_DIR}/e2e"
-go test -v -tags=e2e ./scenarios/... -timeout 5m
+# -count=1 is load-bearing: without it a previous PASS is replayed from the Go build
+# cache and the suite never touches the cluster, so a dead cluster still reports green.
+go test -v -count=1 -tags=e2e ./scenarios/... -timeout 5m
 
 echo "==> Live cluster E2E tests finished successfully!"
