@@ -42,19 +42,19 @@ func (s *WorkflowTestSuite) TestAssetFailureWorkflow_SuccessWithApproval() {
 		SparePartInStock:   true,
 	}, nil)
 
-	s.env.OnActivity(acts.RunDecision, mock.Anything, mock.Anything).Return(&workflow.GovernedDecision{
+	s.env.OnActivity(acts.RunDecision, mock.Anything, mock.Anything, mock.Anything).Return(&workflow.GovernedDecision{
 		DecisionID:       "dec-104",
 		Severity:         "P1",
 		SafetyRisk:       "HIGH",
 		RequiresApproval: true,
 	}, nil)
 
-	s.env.OnActivity(acts.ReserveSparePart, mock.Anything, "acme", "SP-COOL-9981", mock.Anything).Return(&workflow.ReservePartOutput{
+	s.env.OnActivity(acts.ReserveSparePart, mock.Anything, "acme", "SP-COOL-9981", mock.Anything, mock.Anything).Return(&workflow.ReservePartOutput{
 		ReservationID: "RES-9981",
 		PartID:        "SP-COOL-9981",
 	}, nil)
 
-	s.env.OnActivity(acts.CreateFieldWorkOrder, mock.Anything, "acme", "P-104", "P1", mock.Anything, mock.Anything).Return(&workflow.CreateWorkOrderOutput{
+	s.env.OnActivity(acts.CreateFieldWorkOrder, mock.Anything, "acme", "P-104", "P1", mock.Anything, mock.Anything, mock.Anything).Return(&workflow.CreateWorkOrderOutput{
 		WorkOrderID: "WO-10423",
 		AssetID:     "P-104",
 		Priority:    "P1",
@@ -100,21 +100,21 @@ func (s *WorkflowTestSuite) TestAssetFailureWorkflow_SagaCompensationOnFSMError(
 		SparePartInStock: true,
 	}, nil)
 
-	s.env.OnActivity(acts.RunDecision, mock.Anything, mock.Anything).Return(&workflow.GovernedDecision{
+	s.env.OnActivity(acts.RunDecision, mock.Anything, mock.Anything, mock.Anything).Return(&workflow.GovernedDecision{
 		DecisionID:       "dec-104",
 		RequiresApproval: false,
 	}, nil)
 
-	s.env.OnActivity(acts.ReserveSparePart, mock.Anything, "acme", "SP-COOL-9981", mock.Anything).Return(&workflow.ReservePartOutput{
+	s.env.OnActivity(acts.ReserveSparePart, mock.Anything, "acme", "SP-COOL-9981", mock.Anything, mock.Anything).Return(&workflow.ReservePartOutput{
 		ReservationID: "RES-9981",
 		PartID:        "SP-COOL-9981",
 	}, nil)
 
 	// Simulate FSM permanent failure
-	s.env.OnActivity(acts.CreateFieldWorkOrder, mock.Anything, "acme", "P-104", mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("FSM service unavailable"))
+	s.env.OnActivity(acts.CreateFieldWorkOrder, mock.Anything, "acme", "P-104", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("FSM service unavailable"))
 
 	// Expect Saga compensating activity
-	s.env.OnActivity(acts.ReleaseSparePartReservation, mock.Anything, "acme", "RES-9981").Return(nil)
+	s.env.OnActivity(acts.ReleaseSparePartReservation, mock.Anything, "acme", "RES-9981", mock.Anything).Return(nil)
 
 	s.env.ExecuteWorkflow(workflow.AssetFailureWorkflow, workflow.AssetFailureWorkflowInput{
 		TenantID: "acme",

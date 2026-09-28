@@ -12,6 +12,10 @@ type Querier interface {
 	GetSignal(ctx context.Context, arg GetSignalParams) (Signal, error)
 	GetUnpublishedOutboxMessages(ctx context.Context, limit int32) ([]GetUnpublishedOutboxMessagesRow, error)
 	GetWorkOrder(ctx context.Context, arg GetWorkOrderParams) (WorkOrder, error)
+	// The tenant's business-event trail, optionally narrowed to a single correlation id.
+	// The outbox is already the append-only, tenant-scoped record of every domain event,
+	// so the audit view reads it instead of maintaining a second, drift-prone log.
+	ListAuditEntries(ctx context.Context, arg ListAuditEntriesParams) ([]ListAuditEntriesRow, error)
 	MarkOutboxMessagePublished(ctx context.Context, arg MarkOutboxMessagePublishedParams) error
 	SaveOutboxMessage(ctx context.Context, arg SaveOutboxMessageParams) (int64, error)
 	SaveSignal(ctx context.Context, arg SaveSignalParams) error

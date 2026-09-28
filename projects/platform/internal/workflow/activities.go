@@ -44,6 +44,21 @@ func NewActivities(aiRuntimeURL, decisionServiceURL, mcpServerURL string, storag
 	}
 }
 
+// setTraceparent attaches the workflow's traceparent to an outbound request, falling
+// back to the activity context. The worker registers no Temporal tracing interceptor, so
+// an activity context carries no span and injecting from it would set nothing — which is
+// why the traceparent is threaded through from the originating HTTP request instead.
+func setTraceparent(ctx context.Context, header http.Header, traceparent string) {
+	if traceparent == "" {
+		carrier := propagation.MapCarrier{}
+		otel.GetTextMapPropagator().Inject(ctx, carrier)
+		traceparent = carrier.Get("traceparent")
+	}
+	if traceparent != "" {
+		header.Set("traceparent", traceparent)
+	}
+}
+
 func (a *Activities) InvestigateFailure(ctx context.Context, input AssetFailureWorkflowInput) (*EvidenceContext, error) {
 	reqBody, _ := json.Marshal(input)
 	url := fmt.Sprintf("%s/investigate", a.aiRuntimeURL)
@@ -53,11 +68,7 @@ func (a *Activities) InvestigateFailure(ctx context.Context, input AssetFailureW
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if input.Traceparent != "" {
-		req.Header.Set("traceparent", input.Traceparent)
-	} else {
-		otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
-	}
+	setTraceparent(ctx, req.Header, input.Traceparent)
 	resp, err := a.httpClient.Do(req)
 	if err != nil || resp.StatusCode != http.StatusOK {
 		// Fallback deterministic simulation if offline in unit test
@@ -85,7 +96,7 @@ func (a *Activities) InvestigateFailure(ctx context.Context, input AssetFailureW
 	return &evidence, nil
 }
 
-func (a *Activities) RunDecision(ctx context.Context, evidence *EvidenceContext) (*GovernedDecision, error) {
+func (a *Activities) RunDecision(ctx context.Context, evidence *EvidenceContext, traceparent string) (*GovernedDecision, error) {
 	reqPayload := map[string]any{
 		"tenant_id": evidence.TenantID,
 		"asset_id":  evidence.AssetID,
@@ -99,7 +110,7 @@ func (a *Activities) RunDecision(ctx context.Context, evidence *EvidenceContext)
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
+	setTraceparent(ctx, req.Header, traceparent)
 	resp, err := a.httpClient.Do(req)
 	if err != nil || resp.StatusCode != http.StatusOK {
 		// Fallback deterministic simulation
@@ -123,7 +134,7 @@ func (a *Activities) RunDecision(ctx context.Context, evidence *EvidenceContext)
 	return &gd, nil
 }
 
-func (a *Activities) ReserveSparePart(ctx context.Context, tenantID, partID, idempotencyKey string) (*ReservePartOutput, error) {
+func (a *Activities) ReserveSparePart(ctx context.Context, tenantID, partID, idempotencyKey, traceparent string) (*ReservePartOutput, error) {
 	mcpPayload := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
@@ -145,7 +156,7 @@ func (a *Activities) ReserveSparePart(ctx context.Context, tenantID, partID, ide
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
+	setTraceparent(ctx, req.Header, traceparent)
 	resp, err := a.httpClient.Do(req)
 	if err != nil || resp.StatusCode != http.StatusOK {
 		// Simulation fallback
@@ -173,7 +184,7 @@ func (a *Activities) ReserveSparePart(ctx context.Context, tenantID, partID, ide
 	}, nil
 }
 
-func (a *Activities) ReleaseSparePartReservation(ctx context.Context, tenantID, reservationID string) error {
+func (a *Activities) ReleaseSparePartReservation(ctx context.Context, tenantID, reservationID, traceparent string) error {
 	mcpPayload := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
@@ -193,12 +204,12 @@ func (a *Activities) ReleaseSparePartReservation(ctx context.Context, tenantID, 
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
+	setTraceparent(ctx, req.Header, traceparent)
 	_, _ = a.httpClient.Do(req)
 	return nil
 }
 
-func (a *Activities) CreateFieldWorkOrder(ctx context.Context, tenantID, assetID, priority, idempotencyKey, traceparent string) (*CreateWorkOrderOutput, error) {
+func (a *Activities) CreateFieldWorkOrder(ctx context.Context, tenantID, assetID, priority, idempotencyKey, correlationID, traceparent string) (*CreateWorkOrderOutput, error) {
 	mcpPayload := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
@@ -220,7 +231,7 @@ func (a *Activities) CreateFieldWorkOrder(ctx context.Context, tenantID, assetID
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
+	setTraceparent(ctx, req.Header, traceparent)
 	resp, err := a.httpClient.Do(req)
 
 	// A dispatch failure must not skip persistence: the work order still exists in the
@@ -243,7 +254,7 @@ func (a *Activities) CreateFieldWorkOrder(ctx context.Context, tenantID, assetID
 		woID = fmt.Sprintf("WO-%s-10423", assetID)
 	}
 
-	if err := a.recordWorkOrder(ctx, tenantID, assetID, priority, idempotencyKey, woID, traceparent); err != nil {
+	if err := a.recordWorkOrder(ctx, tenantID, assetID, priority, idempotencyKey, correlationID, woID, traceparent); err != nil {
 		return nil, err
 	}
 
@@ -257,7 +268,7 @@ func (a *Activities) CreateFieldWorkOrder(ctx context.Context, tenantID, assetID
 // recordWorkOrder persists the work order and enqueues its work_order.created domain
 // event in a single transaction. Failing here fails the activity, so Temporal retries
 // it — which is safe because the idempotency key makes both writes idempotent.
-func (a *Activities) recordWorkOrder(ctx context.Context, tenantID, assetID, priority, idempotencyKey, woID, traceparent string) error {
+func (a *Activities) recordWorkOrder(ctx context.Context, tenantID, assetID, priority, idempotencyKey, correlationID, woID, traceparent string) error {
 	if a.storage == nil {
 		return nil
 	}
@@ -296,9 +307,12 @@ func (a *Activities) recordWorkOrder(ctx context.Context, tenantID, assetID, pri
 	}
 
 	msg := &domain.OutboxMessage{
-		TenantID:      tenantID,
-		EventType:     "work_order.created",
-		CorrelationID: idempotencyKey,
+		TenantID:  tenantID,
+		EventType: "work_order.created",
+		// The correlation id is the workflow id, matching the signal.received event, so
+		// one audit query returns the whole trail. The idempotency key stays the run id,
+		// which is what makes per-run dispatch idempotent.
+		CorrelationID: correlationID,
 		Traceparent:   traceparent,
 		Payload:       payload,
 		CreatedAt:     now,

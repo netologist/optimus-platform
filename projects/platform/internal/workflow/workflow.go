@@ -40,7 +40,7 @@ func AssetFailureWorkflow(ctx workflow.Context, input AssetFailureWorkflowInput)
 
 	// Step 2: Run Decision (Ollaya + Policy Engine)
 	var decision GovernedDecision
-	err = workflow.ExecuteActivity(ctx, acts.RunDecision, &evidence).Get(ctx, &decision)
+	err = workflow.ExecuteActivity(ctx, acts.RunDecision, &evidence, input.Traceparent).Get(ctx, &decision)
 	if err != nil {
 		return nil, fmt.Errorf("RunDecision activity failed: %w", err)
 	}
@@ -75,24 +75,28 @@ func AssetFailureWorkflow(ctx workflow.Context, input AssetFailureWorkflowInput)
 		logger.Info("Approval granted", "approver", approval.Approver)
 	}
 
-	wfRunID := workflow.GetInfo(ctx).WorkflowExecution.RunID
+	wfInfo := workflow.GetInfo(ctx)
+	wfRunID := wfInfo.WorkflowExecution.RunID
+	// The workflow id is the stable correlation handle (the signal event uses it too);
+	// the run id changes on retry and is therefore only good for idempotency.
+	wfID := wfInfo.WorkflowExecution.ID
 
 	// Step 4: Reserve Spare Part (ERP)
 	var reserveOut ReservePartOutput
-	err = workflow.ExecuteActivity(ctx, acts.ReserveSparePart, input.TenantID, evidence.SparePartID, wfRunID).Get(ctx, &reserveOut)
+	err = workflow.ExecuteActivity(ctx, acts.ReserveSparePart, input.TenantID, evidence.SparePartID, wfRunID, input.Traceparent).Get(ctx, &reserveOut)
 	if err != nil {
 		return nil, fmt.Errorf("ReserveSparePart activity failed: %w", err)
 	}
 
 	// Step 5: Create Field Work Order (FSM) with Saga Compensation
 	var woOut CreateWorkOrderOutput
-	err = workflow.ExecuteActivity(ctx, acts.CreateFieldWorkOrder, input.TenantID, input.AssetID, decision.Severity, wfRunID, input.Traceparent).Get(ctx, &woOut)
+	err = workflow.ExecuteActivity(ctx, acts.CreateFieldWorkOrder, input.TenantID, input.AssetID, decision.Severity, wfRunID, wfID, input.Traceparent).Get(ctx, &woOut)
 	if err != nil {
 		logger.Error("CreateFieldWorkOrder failed, triggering Saga compensation", "error", err)
 
 		// Saga Compensating Activity: Release spare part reservation
 		compCtx, _ := workflow.NewDisconnectedContext(ctx)
-		_ = workflow.ExecuteActivity(compCtx, acts.ReleaseSparePartReservation, input.TenantID, reserveOut.ReservationID).Get(compCtx, nil)
+		_ = workflow.ExecuteActivity(compCtx, acts.ReleaseSparePartReservation, input.TenantID, reserveOut.ReservationID, input.Traceparent).Get(compCtx, nil)
 
 		return &AssetFailureWorkflowOutput{
 			WorkflowID:    workflow.GetInfo(ctx).WorkflowExecution.ID,

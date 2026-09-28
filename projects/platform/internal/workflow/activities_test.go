@@ -16,9 +16,12 @@ func TestCreateFieldWorkOrderPersistsRowAndEvent(t *testing.T) {
 	// Port 1 refuses connections, so the activity exercises its dispatch-failure path.
 	acts := workflow.NewActivities("", "", "http://127.0.0.1:1", storage)
 
-	const traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+	const (
+		traceparent   = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+		correlationID = "wf-asset-failure-P-104-123"
+	)
 
-	out, err := acts.CreateFieldWorkOrder(context.Background(), "acme", "P-104", "P1", "wf-run-123", traceparent)
+	out, err := acts.CreateFieldWorkOrder(context.Background(), "acme", "P-104", "P1", "wf-run-123", correlationID, traceparent)
 	if err != nil {
 		t.Fatalf("CreateFieldWorkOrder returned error: %v", err)
 	}
@@ -49,11 +52,12 @@ func TestCreateFieldWorkOrderPersistsRowAndEvent(t *testing.T) {
 	if pending[0].EventType != "work_order.created" {
 		t.Errorf("expected event type work_order.created, got %s", pending[0].EventType)
 	}
-	if pending[0].CorrelationID != "wf-run-123" {
-		t.Errorf("expected correlation id to be the workflow run id, got %s", pending[0].CorrelationID)
-	}
 	if pending[0].TenantID != "acme" {
 		t.Errorf("expected tenant acme on the event, got %s", pending[0].TenantID)
+	}
+	// The correlation id must match the signal's, so one audit query returns the trail.
+	if pending[0].CorrelationID != correlationID {
+		t.Errorf("expected correlation id %s on the event, got %s", correlationID, pending[0].CorrelationID)
 	}
 	// The originating request's trace must survive so consumers continue the same trace.
 	if pending[0].Traceparent != traceparent {
@@ -66,7 +70,7 @@ func TestCreateFieldWorkOrderPersistsRowAndEvent(t *testing.T) {
 func TestCreateFieldWorkOrderWithoutStorageStillDispatches(t *testing.T) {
 	acts := workflow.NewActivities("", "", "http://127.0.0.1:1", nil)
 
-	out, err := acts.CreateFieldWorkOrder(context.Background(), "acme", "P-104", "P1", "wf-run-456", "")
+	out, err := acts.CreateFieldWorkOrder(context.Background(), "acme", "P-104", "P1", "wf-run-456", "wf-asset-failure-P-104-456", "")
 	if err != nil {
 		t.Fatalf("CreateFieldWorkOrder returned error: %v", err)
 	}

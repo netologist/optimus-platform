@@ -156,6 +156,67 @@
         }
       }
     },
+    "/v1/tenants/{tenant_id}/audit": {
+      "get": {
+        "tags": ["Audit"],
+        "summary": "Retrieve this tenant's business-event audit trail",
+        "description": "Returns the tenant's append-only trail of domain events. Pass correlation_id to narrow it to a single workflow, which returns the whole trail from the inbound signal through to the dispatched work order.",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "description": "Enterprise tenant identifier",
+            "schema": {
+              "type": "string",
+              "example": "acme"
+            }
+          },
+          {
+            "name": "correlation_id",
+            "in": "query",
+            "required": false,
+            "description": "Workflow id to filter the trail by. Omit to return every event for the tenant.",
+            "schema": {
+              "type": "string",
+              "example": "wf-asset-failure-P-104-1790588716936360277"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit trail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditTrailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Tenant isolation or authentication error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/tenants/{tenant_id}/approvals/{workflow_id}/approve": {
       "post": {
         "tags": ["Approvals"],
@@ -360,6 +421,59 @@
           "endpoint": {
             "type": "string",
             "example": "http://integration-mocks.optimus.svc:8080"
+          }
+        }
+      },
+      "AuditEntry": {
+        "type": "object",
+        "required": ["id", "event_type", "correlation_id", "payload", "published", "created_at"],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "example": 7
+          },
+          "event_type": {
+            "type": "string",
+            "example": "work_order.created"
+          },
+          "correlation_id": {
+            "type": "string",
+            "description": "Workflow id shared by every event of one workflow run",
+            "example": "wf-asset-failure-P-104-1790588716936360277"
+          },
+          "traceparent": {
+            "type": "string",
+            "description": "W3C trace context of the request that produced this event",
+            "example": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+          },
+          "payload": {
+            "type": "object",
+            "description": "Event payload as written to the outbox"
+          },
+          "published": {
+            "type": "boolean",
+            "description": "True once the relay has delivered the event to Redpanda"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AuditTrailResponse": {
+        "type": "object",
+        "required": ["tenant_id", "entries"],
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "example": "acme"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEntry"
+            }
           }
         }
       },

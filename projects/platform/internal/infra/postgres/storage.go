@@ -281,3 +281,52 @@ func (s *Storage) MarkOutboxMessagePublished(ctx context.Context, id int64) erro
 	}
 	return nil
 }
+
+func (s *Storage) ListAuditEntries(ctx context.Context, tenantID, correlationID string, limit int) ([]*domain.OutboxMessage, error) {
+	tc, err := tenant.FromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if tenantID != tc.TenantID {
+		return nil, fmt.Errorf("RLS violation: tenant context %s does not match requested tenant %s", tc.TenantID, tenantID)
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+
+	var entries []*domain.OutboxMessage
+	err = s.withTenantTx(ctx, tc.TenantID, func(tx pgx.Tx) error {
+		q := db.New(tx)
+		rows, err := q.ListAuditEntries(ctx, db.ListAuditEntriesParams{
+			TenantID:      tenantID,
+			CorrelationID: pgtype.Text{String: correlationID, Valid: correlationID != ""},
+			Limit:         int32(limit),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to query audit entries: %w", err)
+		}
+
+		entries = make([]*domain.OutboxMessage, 0, len(rows))
+		for _, r := range rows {
+			entry := &domain.OutboxMessage{
+				ID:            r.ID,
+				TenantID:      r.TenantID,
+				EventType:     r.EventType,
+				CorrelationID: r.CorrelationID,
+				Traceparent:   r.Traceparent,
+				Payload:       r.Payload,
+				CreatedAt:     r.CreatedAt.Time,
+			}
+			if r.PublishedAt.Valid {
+				published := r.PublishedAt.Time
+				entry.PublishedAt = &published
+			}
+			entries = append(entries, entry)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return entries, nil
+}

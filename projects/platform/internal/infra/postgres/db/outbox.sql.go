@@ -57,6 +57,67 @@ func (q *Queries) GetUnpublishedOutboxMessages(ctx context.Context, limit int32)
 	return items, nil
 }
 
+const listAuditEntries = `-- name: ListAuditEntries :many
+SELECT id, tenant_id, event_type, correlation_id,
+       COALESCE(traceparent, '')::varchar AS traceparent,
+       payload, published_at, created_at
+FROM outbox
+WHERE tenant_id = $1
+  AND ($3::varchar IS NULL
+       OR correlation_id = $3::varchar)
+ORDER BY created_at ASC, id ASC
+LIMIT $2
+`
+
+type ListAuditEntriesParams struct {
+	TenantID      string      `json:"tenant_id"`
+	Limit         int32       `json:"limit"`
+	CorrelationID pgtype.Text `json:"correlation_id"`
+}
+
+type ListAuditEntriesRow struct {
+	ID            int64              `json:"id"`
+	TenantID      string             `json:"tenant_id"`
+	EventType     string             `json:"event_type"`
+	CorrelationID string             `json:"correlation_id"`
+	Traceparent   string             `json:"traceparent"`
+	Payload       []byte             `json:"payload"`
+	PublishedAt   pgtype.Timestamptz `json:"published_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+// The tenant's business-event trail, optionally narrowed to a single correlation id.
+// The outbox is already the append-only, tenant-scoped record of every domain event,
+// so the audit view reads it instead of maintaining a second, drift-prone log.
+func (q *Queries) ListAuditEntries(ctx context.Context, arg ListAuditEntriesParams) ([]ListAuditEntriesRow, error) {
+	rows, err := q.db.Query(ctx, listAuditEntries, arg.TenantID, arg.Limit, arg.CorrelationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuditEntriesRow
+	for rows.Next() {
+		var i ListAuditEntriesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EventType,
+			&i.CorrelationID,
+			&i.Traceparent,
+			&i.Payload,
+			&i.PublishedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markOutboxMessagePublished = `-- name: MarkOutboxMessagePublished :exec
 UPDATE outbox
 SET published_at = $1

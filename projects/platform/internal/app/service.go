@@ -24,6 +24,9 @@ type Storage interface {
 	SaveOutboxMessage(ctx context.Context, msg *domain.OutboxMessage) error
 	GetUnpublishedOutboxMessages(ctx context.Context, limit int) ([]*domain.OutboxMessage, error)
 	MarkOutboxMessagePublished(ctx context.Context, id int64) error
+	// ListAuditEntries returns the tenant's business-event trail, newest last. An empty
+	// correlationID returns every event for the tenant.
+	ListAuditEntries(ctx context.Context, tenantID, correlationID string, limit int) ([]*domain.OutboxMessage, error)
 }
 
 // MemoryStorage provides an in-memory thread-safe implementation of Storage with RLS emulation
@@ -161,6 +164,34 @@ func (m *MemoryStorage) MarkOutboxMessagePublished(ctx context.Context, id int64
 		}
 	}
 	return fmt.Errorf("outbox message not found")
+}
+
+func (m *MemoryStorage) ListAuditEntries(ctx context.Context, tenantID, correlationID string, limit int) ([]*domain.OutboxMessage, error) {
+	tc, err := tenant.FromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if tenantID != tc.TenantID {
+		return nil, fmt.Errorf("RLS violation: tenant %s cannot access tenant %s data", tc.TenantID, tenantID)
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	entries := make([]*domain.OutboxMessage, 0)
+	for _, msg := range m.outbox {
+		if msg.TenantID != tenantID {
+			continue
+		}
+		if correlationID != "" && msg.CorrelationID != correlationID {
+			continue
+		}
+		entries = append(entries, msg)
+		if limit > 0 && len(entries) >= limit {
+			break
+		}
+	}
+	return entries, nil
 }
 
 // WorkflowClient abstracts Temporal workflow orchestration
@@ -334,4 +365,54 @@ func (s *Service) GetActiveTools(ctx context.Context) ([]domain.Tool, error) {
 			Endpoint:    "http://integration-mocks.optimus.svc:8080",
 		},
 	}, nil
+}
+
+// auditEntryLimit caps one audit page. The trail is append-only and unbounded, so a
+// read must be bounded even though the demo never approaches the cap.
+const auditEntryLimit = 100
+
+// AuditEntry is one node of a tenant's business-event trail.
+type AuditEntry struct {
+	ID            int64           `json:"id"`
+	EventType     string          `json:"event_type"`
+	CorrelationID string          `json:"correlation_id"`
+	Traceparent   string          `json:"traceparent,omitempty"`
+	Payload       json.RawMessage `json:"payload"`
+	Published     bool            `json:"published"`
+	CreatedAt     time.Time       `json:"created_at"`
+}
+
+type AuditTrailResponse struct {
+	TenantID string       `json:"tenant_id"`
+	Entries  []AuditEntry `json:"entries"`
+}
+
+// GetAuditTrail returns the tenant's business events, optionally narrowed to a single
+// correlation id — which for a workflow is its workflow id, so one call returns the
+// whole trail from the inbound signal to the dispatched work order.
+func (s *Service) GetAuditTrail(ctx context.Context, correlationID string) (*AuditTrailResponse, error) {
+	tc, err := tenant.FromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	msgs, err := s.storage.ListAuditEntries(ctx, tc.TenantID, correlationID, auditEntryLimit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list audit entries: %w", err)
+	}
+
+	entries := make([]AuditEntry, 0, len(msgs))
+	for _, m := range msgs {
+		entries = append(entries, AuditEntry{
+			ID:            m.ID,
+			EventType:     m.EventType,
+			CorrelationID: m.CorrelationID,
+			Traceparent:   m.Traceparent,
+			Payload:       m.Payload,
+			Published:     m.PublishedAt != nil,
+			CreatedAt:     m.CreatedAt,
+		})
+	}
+
+	return &AuditTrailResponse{TenantID: tc.TenantID, Entries: entries}, nil
 }

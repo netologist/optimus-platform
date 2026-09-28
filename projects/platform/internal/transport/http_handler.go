@@ -58,6 +58,8 @@ func (h *Handler) routes() {
 			h.handleSignal(w, r)
 		case strings.HasSuffix(path, "/tools") && r.Method == http.MethodGet:
 			h.handleTools(w, r)
+		case strings.HasSuffix(path, "/audit") && r.Method == http.MethodGet:
+			h.handleAudit(w, r)
 		case strings.Contains(path, "/approvals/") && strings.HasSuffix(path, "/approve") && r.Method == http.MethodPost:
 			h.handleApprovalDecision(w, r, true)
 		case strings.Contains(path, "/approvals/") && strings.HasSuffix(path, "/reject") && r.Method == http.MethodPost:
@@ -121,6 +123,17 @@ func (h *Handler) handleTools(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"tools": tools})
+}
+
+func (h *Handler) handleAudit(w http.ResponseWriter, r *http.Request) {
+	trail, err := h.svc.GetAuditTrail(r.Context(), r.URL.Query().Get("correlation_id"))
+	if err != nil {
+		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(trail)
 }
 
 func (h *Handler) handleApprovalDecision(w http.ResponseWriter, r *http.Request, approved bool) {
