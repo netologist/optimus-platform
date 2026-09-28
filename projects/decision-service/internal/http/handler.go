@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/optimus/projects/decision-service/internal/decision"
 	"go.opentelemetry.io/otel"
@@ -77,6 +78,36 @@ func (h *Handler) routes() {
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(govDecision)
+	})
+
+	// GET /v1/tenants/{tenant_id}/decisions/{decision_id}
+	// Reads back a persisted decision, including the raw model answer and the policy
+	// version that governed it, so an audit can be reconstructed after the fact.
+	h.mux.HandleFunc("/v1/tenants/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+
+		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		if len(parts) != 5 || parts[3] != "decisions" {
+			http.NotFound(w, r)
+			return
+		}
+		tenantID, decisionID := parts[2], parts[4]
+
+		rec, err := h.svc.GetAudit(r.Context(), tenantID, decisionID)
+		if err != nil {
+			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+			return
+		}
+		if rec == nil {
+			http.Error(w, `{"error":"decision not found"}`, http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(rec)
 	})
 }
 

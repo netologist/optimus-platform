@@ -128,3 +128,12 @@ func (s *Service) Decide(ctx context.Context, req DecisionRequest) (*policy.Gove
 
 	return &governed, nil
 }
+
+// GetAudit returns the persisted decision record for a tenant. It reports (nil, nil) when
+// no record exists, so the caller can distinguish "not found" from a storage failure.
+func (s *Service) GetAudit(ctx context.Context, tenantID, decisionID string) (*audit.Record, error) {
+	if s.auditStore == nil {
+		return nil, nil
+	}
+	return s.auditStore.Get(ctx, tenantID, decisionID)
+}
