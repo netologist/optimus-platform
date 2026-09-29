@@ -1,14 +1,15 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# Local-dev-only observability stack (Prometheus, Grafana, Elasticsearch, Kibana).
+# Local-dev-only read-only viewers and log/metric stack: Prometheus, Grafana, Elasticsearch,
+# Kibana, the OTel Collector log shipper and Redpanda Console.
 #
 # Deliberately NOT part of deployments/overlays/kind-ci:
 #   - the E2E suite asserts on Jaeger spans only (e2e/helpers/jaeger.go, JAEGER_URL), and
 #     Jaeger itself stays in ../../base/observability;
-#   - nothing in CI scrapes Prometheus, renders Grafana, or ships logs into Elasticsearch
-#     (no shipper exists yet — see docs/tech-debts/TD-0003), so the four pods only added
-#     startup cost to the `kubectl wait --all --timeout=480s` gate in
+#   - nothing in CI scrapes Prometheus, renders Grafana or reads the consoles, and no shipper
+#     is asserted on (see docs/tech-debts/TD-0003), so these pods only added startup cost to
+#     the `kubectl wait --all --timeout=480s` gate in
 #     .github/workflows/build-and-test.yaml.
 namespace: optimus
 
@@ -20,3 +21,5 @@ resources:
   # Log shipping: tails the container logs and indexes them into Elasticsearch (TD-0003).
   - otel-collector.yaml
   - kibana-data-view.yaml
+  # Read-side view of the event log (topics, consumer groups, traceparent headers).
+  - redpanda-console.yaml

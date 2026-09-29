@@ -471,7 +471,7 @@ that mode uses in-process mocks and stays fast enough for a pre-commit hook.
 
 Every service is reachable over HTTPS on its own hostname, with certificates the OS and browsers actually trust, and DNS that needs no `/etc/hosts` edits.
 
-The Grafana, Prometheus and Kibana rows below are served by the `kind-dev`-only observability overlay (`deployments/overlays/kind-dev/observability-local/`), so they appear after `mise run deploy:dev`. The CI cluster runs Jaeger only.
+The Grafana, Prometheus, Kibana and Redpanda Console rows below are served by the `kind-dev`-only local overlay (`deployments/overlays/kind-dev/observability-local/`), so they appear after `mise run deploy:dev`. The CI cluster runs Jaeger only.
 
 | Service | URL | Notes |
 |---|---|---|
@@ -484,7 +484,7 @@ The Grafana, Prometheus and Kibana rows below are served by the `kind-dev`-only 
 | **Kibana** | https://kibana.optimus.local | Centralized logs (ELK) · `kind-dev` overlay only |
 | **Temporal UI** | https://temporal.optimus.local | Workflow runs, history and the waiting approval signal |
 | **Redpanda Admin** | https://redpanda.optimus.local | Kafka admin API |
-| **Redpanda Console** | https://redpanda-console.optimus.local | Topics, consumer groups and the published events |
+| **Redpanda Console** | https://redpanda-console.optimus.local | Topics, consumer groups and the published events · `kind-dev` overlay only |
 
 **How it works**
 

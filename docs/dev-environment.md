@@ -240,7 +240,7 @@ mise run ingress:all
 
 ## Service Addresses (`*.optimus.local`)
 
-After the `mise run kind-create` or `mise run deploy:dev` command has run, the following addresses become active. Grafana, Prometheus and Kibana are deployed by the `kind-dev`-only observability overlay (`deployments/overlays/kind-dev/observability-local/`); the `kind-ci` overlay omits them, so a CI cluster serves Jaeger only.
+After the `mise run kind-create` or `mise run deploy:dev` command has run, the following addresses become active. Grafana, Prometheus, Kibana and Redpanda Console are deployed by the `kind-dev`-only local overlay (`deployments/overlays/kind-dev/observability-local/`); the `kind-ci` overlay omits them, so a CI cluster serves Jaeger only.
 
 The Elasticsearch and Kibana images come from `docker.elastic.co`, which is only intermittently reachable from the Kind nodes: on the first `mise run deploy:dev` the two pods can sit in `ImagePullBackOff` for a few minutes and then converge on their own (kubelet backoff). See [TD-0003 §3.1](tech-debts/TD-0003-centralized-logging-elasticsearch-kibana.md) for the measurements and the functional verification commands.
 
@@ -254,7 +254,7 @@ The Elasticsearch and Kibana images come from `docker.elastic.co`, which is only
 | **Kibana** | https://kibana.optimus.local | Log search — the `Optimus Logs` data view is provisioned automatically |
 | **Temporal UI** | https://temporal.optimus.local | Workflow runs, history and the waiting approval signal |
 | **Redpanda Admin** | https://redpanda.optimus.local | Kafka admin API |
-| **Redpanda Console** | https://redpanda-console.optimus.local | Topics, consumer groups and the events the outbox relay published |
+| **Redpanda Console** | https://redpanda-console.optimus.local | Topics, consumer groups and the events the outbox relay published · `kind-dev` overlay only |
 | **Kong API Gateway** | https://api.optimus.local/v1/ | Platform API entry point |
 | **Platform API** | https://platform.optimus.local | Direct API access |
 | **Decision Service** | https://decision.optimus.local | Decision service |

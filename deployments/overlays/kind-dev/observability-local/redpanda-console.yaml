@@ -1,10 +1,11 @@
 # Redpanda Console — the read-side view of the event log this deployment publishes to.
 #
-# It is here for the same reason Grafana and Jaeger are: the dual-write boundary
-# (platform -> outbox -> relay -> Redpanda) is only debuggable if the events can be looked
-# at, including the traceparent header each record carries. It participates in nothing —
-# no service depends on it, and the E2E suite reads the topics directly — so it is
-# deliberately last in the dependency order and probed on its port alone.
+# It lives in the kind-dev-only overlay for the same reason Grafana and Jaeger-based UIs do:
+# the dual-write boundary (platform -> outbox -> relay -> Redpanda) is only debuggable if the
+# events can be looked at, including the traceparent header each record carries. It
+# participates in nothing — no service depends on it, and the E2E suite reads the topics
+# directly — so it is deliberately last in the dependency order and probed on its port alone.
+# CI therefore does not deploy it (it would only cost the `kubectl wait --all` gate time).
 #
 # Configuration follows the upstream quickstart for Console v3: a YAML config file at
 # CONFIG_FILEPATH rather than the flat environment variables Console v2 took.

@@ -1,6 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# Redpanda itself only: nothing in the cluster (or in CI) consumes it, but the broker is the
+# dual-write boundary every service publishes through. Redpanda Console is a read-only viewer
+# and lives in deployments/overlays/kind-dev/observability-local/ instead.
 resources:
   - redpanda.yaml
-  - console.yaml

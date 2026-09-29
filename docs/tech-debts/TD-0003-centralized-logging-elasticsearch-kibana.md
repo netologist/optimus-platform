@@ -54,9 +54,11 @@ local UIs live in the `kind-dev`-only overlay:
 
 ```
 deployments/base/observability/kustomization.yaml   → jaeger.yaml          (both overlays)
+deployments/base/redpanda/kustomization.yaml        → redpanda.yaml        (both overlays)
 deployments/overlays/kind-dev/observability-local/  → prometheus.yaml, grafana.yaml,
                                                       elasticsearch.yaml, kibana.yaml,
-                                                      otel-collector.yaml, kibana-data-view.yaml
+                                                      otel-collector.yaml, kibana-data-view.yaml,
+                                                      redpanda-console.yaml
 deployments/overlays/kind-dev/kustomization.yaml    → resources: + observability-local
 deployments/overlays/kind-ci/kustomization.yaml     → unchanged (intentionally excludes them)
 ```
