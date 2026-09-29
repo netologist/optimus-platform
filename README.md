@@ -80,7 +80,8 @@ flowchart TB
     subgraph STORAGE_EVENTS["5. Data, Events & Observability"]
         Postgres[("PostgreSQL 17 + pgvector<br/>• Tenant Schemas & RLS<br/>• document_chunks Partitioning<br/>• signals / work_orders / audit")]
         Redpanda[("Redpanda (Kafka Wire-Compatible)<br/>• events.work_order.created<br/>• Durable Replayable Event Log")]
-        OTel["OpenTelemetry Collector + Jaeger<br/>• W3C TraceContext Propagation<br/>• Prometheus & Grafana Metrics"]
+        OTel["OpenTelemetry Collector + Jaeger<br/>• W3C TraceContext Propagation<br/>• Prometheus & Grafana Metrics (kind-dev overlay)"]
+        ELK["Elasticsearch + Kibana<br/>• Centralized Log Search (kind-dev overlay)"]
         ObjectStore[("S3 / MinIO Object Storage<br/>• Engineering Manuals & Blueprints")]
 
         DB_Write -.-> Postgres
@@ -90,6 +91,9 @@ flowchart TB
         PLATFORM -.-> OTel
         AI_DECISION -.-> OTel
         ENTERPRISE -.-> OTel
+        PLATFORM -.-> ELK
+        AI_DECISION -.-> ELK
+        ENTERPRISE -.-> ELK
     end
 
     subgraph K8S_OPERATOR["6. Kubernetes Operator & Infra Lifecycle (controller-runtime)"]
@@ -122,7 +126,7 @@ flowchart TB
     class API,DB_Write,TW,OutboxRelay platform;
     class AIRuntime,HybridRAG,NATS,DecisionSvc,JevOllaya ai;
     class MCPGW,MockEAM,MockPLM,MockERP,MockFSM,MockOI mcp;
-    class Postgres,Redpanda,OTel,ObjectStore data;
+    class Postgres,Redpanda,OTel,ObjectStore,ELK data;
     class Operator,CRD_Env,CRD_Integ,CRD_Model,CRD_Knowledge,CRD_Policy k8s;
 ```
 
@@ -261,11 +265,13 @@ flowchart TB
         MCPCustom --> SubMocks["EAM, PLM, ERP, FSM, OI<br/>• Idempotent handlers<br/>• /call-log verification"]
     end
 
-    subgraph RUNNING_DATA_EVENTS["Data, Observability & Telemetry (Active)"]
+    subgraph RUNNING_DATA_EVENTS["Data, Observability & Telemetry (Jaeger: both overlays — Prometheus/Grafana/ELK: kind-dev only)"]
         RelayWorker --> RedpandaBroker[("Redpanda (Kafka)<br/>• events.work_order.created")]
         JaegerCollector["Jaeger All-in-One (Port 16686)<br/>• W3C TraceContext spans across all services"]
-        PrometheusCollector["Prometheus Server (Port 9090)<br/>• Scrapes /metrics every 5s across all services"]
-        GrafanaServer["Grafana Dashboard Server (Port 3000)<br/>• Auto-provisioned Optimus Operations Overview"]
+        PrometheusCollector["Prometheus Server (Port 9090)<br/>• Scrapes /metrics every 5s (kind-dev overlay)"]
+        GrafanaServer["Grafana Dashboard Server (Port 3000)<br/>• Auto-provisioned Optimus Operations Overview (kind-dev overlay)"]
+        ElasticsearchNode[("Elasticsearch (single-node)<br/>• Centralized log store (kind-dev overlay)")]
+        KibanaNode["Kibana (Port 5601)<br/>• Log search & visualization (kind-dev overlay)"]
 
         PlatformAPI -.-> JaegerCollector
         TWGo -.-> JaegerCollector
@@ -281,6 +287,7 @@ flowchart TB
 
         PrometheusCollector --> GrafanaServer
         JaegerCollector --> GrafanaServer
+        ElasticsearchNode --> KibanaNode
     end
 
     subgraph RUNNING_OPERATOR["Kubernetes Operator (Active)"]
@@ -299,7 +306,7 @@ flowchart TB
     classDef storage fill:#e2e8f0,stroke:#334155;
 
     class TestRunner,KongEdge,PlatformAPI,TWGo,RelayWorker,AIRuntimeService,IngestWorker,DecisionSvcGo,OllayaStub,MCPCustom,SubMocks,K8sController,CRD_EnvA,CRD_IntegA,CRD_ModelA,CRD_KnowA live;
-    class PostgresPrimary,RedpandaBroker,JaegerCollector,PrometheusCollector,GrafanaServer storage;
+    class PostgresPrimary,RedpandaBroker,JaegerCollector,PrometheusCollector,GrafanaServer,ElasticsearchNode,KibanaNode storage;
 ```
 
 ### 4.2 Implementation Gap Analysis (What is Built vs. What is Planned)
@@ -312,9 +319,10 @@ flowchart TB
 | **MCP Server Standard** | **Official Anthropic Go MCP SDK** (`github.com/modelcontextprotocol/go-sdk/mcp`) | Lightweight custom JSON-RPC 2.0 HTTP server with `/call-log` | Tracked in [TD-0001](docs/tech-debts/TD-0001-official-go-mcp-sdk-migration.md). Handles `tools/list` and `tools/call`. |
 | **Decision Engine** | Real **Ollaya binary / JEV hosted service** (SystemOne API) | SystemOne Wire Client + **Go Ollaya Stub Server** | `decision-service` speaks real SystemOne protocol; `projects/ollaya` simulates the model locally for zero-cost CI. |
 | **Object Storage (RAG)** | Real **AWS S3 / MinIO** for raw document ingestion | Operator creates Job running `ingest.py` on local fixture | Tracked in [TD-0002](docs/tech-debts/TD-0002-s3-minio-object-storage-ingestion.md). pgvector embeddings and chunking are fully working. |
-| **Observability (Tracing)** | **OpenTelemetry SDK** + **Jaeger All-in-One** | **Fully Implemented (100%)** | Active across `platform`, `decision-service`, `integration-mocks`, `ollaya`, and `ai-runtime` with W3C TraceContext propagation. |
-| **Observability (Metrics)** | **Prometheus** (v2.54) scraping `/metrics` on all services | **Fully Implemented (100%)** | Active targets: Platform API, Decision Service, Integration Mocks, Ollaya. |
-| **Observability (Dashboards)** | **Grafana** (v11.2) with auto-provisioned dashboards | **Fully Implemented (100%)** | Auto-provisions Prometheus & Jaeger datasources and `Optimus - Enterprise Operations Overview` dashboard. |
+| **Observability (Tracing)** | **OpenTelemetry SDK** + **Jaeger All-in-One** | **Fully Implemented (100%)** | Active across `platform`, `decision-service`, `integration-mocks`, `ollaya`, and `ai-runtime` with W3C TraceContext propagation. Shipped to **both** overlays — it is the pillar the E2E span assertions read. |
+| **Observability (Metrics)** | **Prometheus** (v2.54) scraping `/metrics` on all services | **Fully Implemented (100%)** | Active targets: Platform API, Decision Service, Integration Mocks, Ollaya. Deployed by the `kind-dev` overlay only (`deployments/overlays/kind-dev/observability-local/`); CI does not scrape metrics. |
+| **Observability (Dashboards)** | **Grafana** (v11.2) with auto-provisioned dashboards | **Fully Implemented (100%)** | Auto-provisions Prometheus & Jaeger datasources and `Optimus - Enterprise Operations Overview` dashboard. `kind-dev` overlay only, same as Prometheus. |
+| **Observability (Logs)** | **Elasticsearch + Kibana** (ELK) for centralized log aggregation | ES + Kibana deployed in the `kind-dev` overlay; log shipping pending | Tracked in [TD-0003](docs/tech-debts/TD-0003-centralized-logging-elasticsearch-kibana.md). Store and UI are live locally; a Fluent Bit/Filebeat shipper is deferred, so no logs are ingested yet — which is why neither pod is deployed in CI. |
 | **Event Streaming** | **Redpanda** (Kafka wire-compatible) + Transactional Outbox | **Fully Implemented (100%)** | `cmd/outbox-relay` polls the PostgreSQL outbox and publishes via `franz-go` with the W3C `traceparent` carried as a record header. Work orders and their `work_order.created` event are written in a single transaction, so the event cannot diverge from the row. |
 | **Agent Telemetry** | **NATS Core** for live ephemeral agent thinking streams | Architectural Design Complete | Designed in ADR-0006; scheduled for Phase 9 live operations dashboard. |
 | **Kubernetes Operator** | Reconciles `EnterpriseEnvironment`, `EnterpriseIntegration`, `DecisionModel`, `EnterpriseKnowledgeSource` | **Fully Implemented (100%)** | Kubebuilder controllers, CRD YAMLs, sample manifests, and envtest unit tests passing. |
@@ -458,14 +466,17 @@ that mode uses in-process mocks and stays fast enough for a pre-commit hook.
 
 Every service is reachable over HTTPS on its own hostname, with certificates the OS and browsers actually trust, and DNS that needs no `/etc/hosts` edits.
 
+The Grafana, Prometheus and Kibana rows below are served by the `kind-dev`-only observability overlay (`deployments/overlays/kind-dev/observability-local/`), so they appear after `mise run deploy:dev`. The CI cluster runs Jaeger only.
+
 | Service | URL | Notes |
 |---|---|---|
 | **Kong API Gateway** | https://api.optimus.local/v1/ | Platform API entry point |
 | **Platform API** | https://platform.optimus.local | Direct API access |
 | **Decision Service** | https://decision.optimus.local | Typed decisions (`/v1/decisions`) |
-| **Grafana** | https://grafana.optimus.local | admin / admin |
-| **Prometheus** | https://prometheus.optimus.local | Metric queries |
+| **Grafana** | https://grafana.optimus.local | admin / admin · `kind-dev` overlay only |
+| **Prometheus** | https://prometheus.optimus.local | Metric queries · `kind-dev` overlay only |
 | **Jaeger** | https://jaeger.optimus.local | Distributed traces |
+| **Kibana** | https://kibana.optimus.local | Centralized logs (ELK) · `kind-dev` overlay only |
 | **Temporal UI** | https://temporal.optimus.local | Workflow runs, history and the waiting approval signal |
 | **Redpanda Admin** | https://redpanda.optimus.local | Kafka admin API |
 | **Redpanda Console** | https://redpanda-console.optimus.local | Topics, consumer groups and the published events |

@@ -11,6 +11,9 @@ resources:
   - ../../base/kong
   - ../../base/ollaya
   - ../../base/observability
+  # Local-dev-only UIs (Prometheus, Grafana, Elasticsearch, Kibana). Intentionally absent
+  # from kind-ci — nothing in CI or the E2E suite consumes them.
+  - observability-local
 
   # Application Services
   - ../../base/platform

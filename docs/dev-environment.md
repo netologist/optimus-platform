@@ -240,7 +240,7 @@ mise run ingress:all
 
 ## Service Addresses (`*.optimus.local`)
 
-After the `mise run kind-create` or `mise run deploy:dev` command has run, the following addresses become active.
+After the `mise run kind-create` or `mise run deploy:dev` command has run, the following addresses become active. Grafana, Prometheus and Kibana are deployed by the `kind-dev`-only observability overlay (`deployments/overlays/kind-dev/observability-local/`); the `kind-ci` overlay omits them, so a CI cluster serves Jaeger only.
 
 > **DNS works automatically via dnsmasq** — if the dnsmasq setup from the Requirements section has been done, there is nothing you need to add to `/etc/hosts`. The `*.optimus.local` wildcard resolves automatically to `127.0.0.1`. Adding a new service also requires zero configuration.
 

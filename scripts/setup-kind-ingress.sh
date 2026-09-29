@@ -490,6 +490,7 @@ cmd_ingress_all() {
     "grafana:optimus:grafana:3000:grafana.optimus.local"
     "prometheus:optimus:prometheus:9090:prometheus.optimus.local"
     "jaeger:optimus:jaeger:16686:jaeger.optimus.local"
+    "kibana:optimus:kibana:5601:kibana.optimus.local"
     "temporal-ui:optimus:temporal:8080:temporal.optimus.local"
     "redpanda:optimus:redpanda:9644:redpanda.optimus.local"
     "redpanda-console:optimus:redpanda-console:8080:redpanda-console.optimus.local"

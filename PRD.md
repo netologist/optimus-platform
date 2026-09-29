@@ -145,7 +145,7 @@ The `decision-service` (Go, §7) owns: calling this endpoint, validating the res
 | Task runner (per Go project) | `go tool task` (go-task) | follows the same convention as an earlier project of mine; `mise` tasks are thin wrappers that call these |
 | E2E | Go + Kind + Ginkgo/Gomega | matches an earlier project of mine |
 | Fast integration tests (pre-Kind) | `testcontainers-go` | Postgres/Redpanda per-package tests without a full cluster (§8.5, new addition) |
-| Observability | OpenTelemetry + Prometheus + Grafana + Jaeger (or Tempo) | |
+| Observability | OpenTelemetry + Prometheus + Grafana + Jaeger (or Tempo) | Prometheus/Grafana/ELK are read-only `kind-dev`-only UIs; the CI cluster and the E2E suite consume Jaeger only (TD-0003) |
 | Lint / static analysis | `golangci-lint`, `staticcheck`, `govulncheck`, `ruff`, `mypy`/`pyright` | |
 | Mocks | `mockery` (Go), `pytest` fixtures (Python) | |
 | Git hooks | `lefthook` | matches an earlier project of mine |
@@ -674,7 +674,7 @@ These sections of the original design brief (§14–17, §23, §29–31) are **k
 - **Temporal**: owns all durable business workflows; kept exactly as designed, including the explicit "Operator is not responsible for this" boundary. **See §19.1 (ADR‑013) for the precise activity boundary** — Temporal orchestrates the business process end-to-end but treats AI investigation and decisioning as single coarse-grained activities, never orchestrating individual agent/tool calls itself.
 - **Multi-tenancy**: `tenant_id` everywhere + Postgres RLS + `TenantContext` threaded through API → agent → tool → decision → workflow. Kept as-is; this is correct and non-negotiable — **every new table, every new MCP tool, every new Temporal activity must carry tenant context from day one**, not bolted on later.
 - **Security**: kept as specified (RBAC, S2S auth, Secret refs, no secrets in Git, idempotent actions, approval gates, audit trail, tool allowlists, MCP capability boundaries). One addition: **supply-chain hygiene** — generate an SBOM per image (`syft`) and sign images (`cosign`) in CI as a demonstrable, low-effort security-maturity signal (new addition, §10).
-- **Observability**: OTel + Prometheus + Grafana + Jaeger, kept as specified, trace propagation across HTTP → agent → MCP → integration → decision → Temporal → enterprise action.
+- **Observability**: OTel + Prometheus + Grafana + Jaeger, kept as specified, trace propagation across HTTP → agent → MCP → integration → decision → Temporal → enterprise action. Deployment split: Jaeger (the pillar the E2E suite asserts on) ships in `base` to both overlays; Prometheus, Grafana and Elasticsearch/Kibana are local-dev viewers in the `kind-dev` overlay only (`deployments/overlays/kind-dev/observability-local/`).
 - **API Gateway**: Kong at the edge via **Kong Ingress Controller** in Kind (this PRD makes the original's "Kong sits at the edge" concrete for the Kubernetes deployment target).
 
 ### 9.1 New addition: NATS — narrow scope, not a Kafka replacement
@@ -1052,7 +1052,8 @@ flowchart TB
         Postgres[("PostgreSQL 17 + pgvector<br/>[Container: DB]")]
         Redpanda[("Redpanda<br/>[Container: event log]")]
         NATS(("NATS core<br/>[Container: ephemeral pub/sub, optional]"))
-        Observability["OTel Collector + Prometheus<br/>+ Grafana + Jaeger<br/>[Container: observability stack]"]
+        Observability["OTel Collector + Jaeger<br/>[Container: observability stack — kind-ci + kind-dev]"]
+        ObservabilityUIs["Prometheus + Grafana + Elasticsearch + Kibana<br/>[Container: read-only local UIs — kind-dev overlay only]"]
     end
 
     OllayaExt[["Ollaya<br/>[external, in-cluster or local]"]]
@@ -1090,9 +1091,10 @@ flowchart TB
     DecisionSvc -.-> Observability
     Mocks -.-> Observability
     Operator -.-> Observability
+    Observability --> ObservabilityUIs
 ```
 
-The local development environment also runs two read-only viewers that appear in no flow above: the Temporal UI (a sidecar of the Temporal server container) and Redpanda Console (a separate deployment beside the event log). Neither is a dependency of anything — no service calls them, the E2E suite reads the Redpanda topics directly — they exist so the workflow history and the published events, traceparent headers included, can be inspected by hand (`deployments/base/redpanda/console.yaml`, `docs/dev-environment.md`).
+The local development environment also runs two read-only viewers that appear in no flow above: the Temporal UI (a sidecar of the Temporal server container) and Redpanda Console (a separate deployment beside the event log). Neither is a dependency of anything — no service calls them, the E2E suite reads the Redpanda topics directly — they exist so the workflow history and the published events, traceparent headers included, can be inspected by hand (`deployments/base/redpanda/console.yaml`, `docs/dev-environment.md`). The Prometheus, Grafana and Elasticsearch/Kibana UIs belong to the same category and go one step further: they are deployed **only** by the `kind-dev` overlay (`deployments/overlays/kind-dev/observability-local/`), because nothing in the cluster scrapes Prometheus, renders Grafana, or ships logs into Elasticsearch yet — the CI cluster and the E2E suite need Jaeger alone (see `docs/tech-debts/TD-0003`).
 
 ### 18.4 C4 — Level 3: Component — AI Runtime (Python)
 

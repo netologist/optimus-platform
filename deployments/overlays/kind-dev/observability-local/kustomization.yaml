@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Local-dev-only observability stack (Prometheus, Grafana, Elasticsearch, Kibana).
+#
+# Deliberately NOT part of deployments/overlays/kind-ci:
+#   - the E2E suite asserts on Jaeger spans only (e2e/helpers/jaeger.go, JAEGER_URL), and
+#     Jaeger itself stays in ../../base/observability;
+#   - nothing in CI scrapes Prometheus, renders Grafana, or ships logs into Elasticsearch
+#     (no shipper exists yet — see docs/tech-debts/TD-0003), so the four pods only added
+#     startup cost to the `kubectl wait --all --timeout=480s` gate in
+#     .github/workflows/build-and-test.yaml.
+namespace: optimus
+
+resources:
+  - prometheus.yaml
+  - grafana.yaml
+  - elasticsearch.yaml
+  - kibana.yaml
