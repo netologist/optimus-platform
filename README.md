@@ -296,6 +296,7 @@ flowchart TB
         CRD_IntegA["EnterpriseIntegration (mocks)"] --> K8sController
         CRD_ModelA["DecisionModel (laya)"] --> K8sController
         CRD_KnowA["EnterpriseKnowledgeSource (s3)"] --> K8sController
+        CRD_PolicyA["DecisionPolicy (acme)<br/>• CRD installed, no reconciler yet<br/>• status.phase never populated"]
 
         K8sController -.->|Deploys| MCPCustom
         K8sController -.->|Pulls /api/pull| OllayaStub
@@ -304,9 +305,11 @@ flowchart TB
 
     classDef live fill:#dcfce7,stroke:#16a34a;
     classDef storage fill:#e2e8f0,stroke:#334155;
+    classDef designed fill:#fef3c7,stroke:#d97706,stroke-dasharray: 5 5;
 
     class TestRunner,KongEdge,PlatformAPI,TWGo,RelayWorker,AIRuntimeService,IngestWorker,DecisionSvcGo,OllayaStub,MCPCustom,SubMocks,K8sController,CRD_EnvA,CRD_IntegA,CRD_ModelA,CRD_KnowA live;
     class PostgresPrimary,RedpandaBroker,JaegerCollector,PrometheusCollector,GrafanaServer,ElasticsearchNode,KibanaNode storage;
+    class CRD_PolicyA designed;
 ```
 
 ### 4.2 Implementation Gap Analysis (What is Built vs. What is Planned)
@@ -325,7 +328,7 @@ flowchart TB
 | **Observability (Logs)** | **Elasticsearch + Kibana** (ELK) for centralized log aggregation | ES + Kibana deployed in the `kind-dev` overlay; log shipping pending | Tracked in [TD-0003](docs/tech-debts/TD-0003-centralized-logging-elasticsearch-kibana.md). Store and UI are live locally; a Fluent Bit/Filebeat shipper is deferred, so no logs are ingested yet — which is why neither pod is deployed in CI. |
 | **Event Streaming** | **Redpanda** (Kafka wire-compatible) + Transactional Outbox | **Fully Implemented (100%)** | `cmd/outbox-relay` polls the PostgreSQL outbox and publishes via `franz-go` with the W3C `traceparent` carried as a record header. Work orders and their `work_order.created` event are written in a single transaction, so the event cannot diverge from the row. |
 | **Agent Telemetry** | **NATS Core** for live ephemeral agent thinking streams | Architectural Design Complete | Designed in ADR-0006; scheduled for Phase 9 live operations dashboard. |
-| **Kubernetes Operator** | Reconciles `EnterpriseEnvironment`, `EnterpriseIntegration`, `DecisionModel`, `EnterpriseKnowledgeSource` | **Fully Implemented (100%)** | Kubebuilder controllers, CRD YAMLs, sample manifests, and envtest unit tests passing. |
+| **Kubernetes Operator** | Reconciles `EnterpriseEnvironment`, `EnterpriseIntegration`, `DecisionModel`, `DecisionPolicy`, `EnterpriseKnowledgeSource` | Four CRDs implemented, a fifth (`DecisionPolicy`) designed | Four CRDs have Kubebuilder controllers, CRD YAMLs, sample manifests and envtest unit tests: `EnterpriseEnvironment`, `EnterpriseIntegration`, `DecisionModel`, `EnterpriseKnowledgeSource`. `DecisionPolicy` is currently **type-only**: the CRD (`platform.optimus.dev_decisionpolicies.yaml`) is installed, the Go type exists and tenant CRs apply (`deployments/tenants/acme/policy.yaml` — live, but with an empty `status.phase`), yet no reconciler is registered in `cmd/main.go` — see `projects/operator/README.md` §5. |
 | **Multi-Tenant Security** | PostgreSQL 17 **Row-Level Security (RLS)** via `TenantContext` | **Fully Implemented (100%)** | Database-level isolation blocks cross-tenant reads/writes. |
 
 ---
