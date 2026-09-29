@@ -206,7 +206,6 @@ golangci-lint = "latest"
 lefthook = "latest"
 
 [env]
-COMPOSE_PROJECT_NAME = "optimus"
 KIND_CLUSTER_NAME = "optimus"
 OLLAYA_HOST = "127.0.0.1:11435"
 KUBECONFIG = "{{config_root}}/.kube/kind-optimus.yaml"

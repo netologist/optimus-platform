@@ -21,7 +21,7 @@ The following tools are not managed by `mise`; they must be installed on the mac
 > Using Colima instead of Docker Desktop is recommended: no license restrictions, lower resource consumption.
 
 ```bash
-brew install colima docker docker-compose
+brew install colima docker
 
 # Start Colima (ample resources: 4 CPU, 8 GB RAM, 60 GB disk)
 colima start --cpu 4 --memory 8 --disk 60
@@ -31,6 +31,10 @@ brew services start colima
 ```
 
 > **If you use Docker Desktop** you do not need to install Colima. Do not run both at the same time.
+
+> **Local development is Kind-only.** Colima/Docker exist here to run the Kind cluster
+> (`mise run kind-create` → `mise run deploy:dev`); there is no `docker-compose` path — the
+> app services never ran there, so it drifted from the manifests and was removed.
 
 #### 3. Kind (Kubernetes in Docker)
 

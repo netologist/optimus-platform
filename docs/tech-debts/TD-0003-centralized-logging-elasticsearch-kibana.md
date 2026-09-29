@@ -1,7 +1,7 @@
 # TD-0003: Centralized Logging — Elasticsearch + Kibana (ELK), shipped by an OTel Collector DaemonSet
 
 - **Status:** Open / Accepted Tech Debt (log shipping implemented for local dev; retention and structured logging deferred)
-- **Impact Area:** `deployments/overlays/kind-dev/observability-local/`, `docker-compose.yaml`
+- **Impact Area:** `deployments/overlays/kind-dev/observability-local/`, `deployments/base/observability/`
 - **Target Release:** Phase 9 (Production-Quality Engineering / Enterprise Hardening)
 - **Component Owner:** Platform & Observability Engineering
 
@@ -26,7 +26,6 @@ This change adds **Elasticsearch** (single-node, security disabled for the local
 - Ingress route `kibana.optimus.local` wired into `scripts/setup-kind-ingress.sh`
   (`cmd_ingress_all`); it is created by `mise run deploy:dev` only, because `scripts/deploy.sh`
   runs `ingress-all` only for the `kind-dev` overlay.
-- Local-dev parity in `docker-compose.yaml` (services `elasticsearch` and `kibana`).
 - `deployments/overlays/kind-dev/observability-local/otel-collector.yaml` — an OTel Collector
   DaemonSet (contrib 0.111.0) that tails `/var/log/pods/*/*/*.log` on every node, recovers the
   pod identity from the log path, enriches it through the Kubernetes API and bulk-indexes into
@@ -200,6 +199,10 @@ into the base.
 - Local-dev-only placement keeps the CI cluster to exactly the components CI consumes, while
   `mise run deploy:dev` keeps the full demo experience (dashboards + console UIs) and the
   `*.optimus.local` Ingress routes.
+- Local development is Kind-only. The earlier `docker-compose.yaml` scratch stack was removed:
+  it only ever carried infrastructure containers (Postgres, Redpanda, Temporal, Kong, Ollaya,
+  Jaeger, ES, Kibana), so it could not run the platform end to end and drifted from these
+  manifests — the same containers are deployed to Kind by the overlays described above.
 
 ## 6. References & Related Documents
 
