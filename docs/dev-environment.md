@@ -283,6 +283,11 @@ Log lines are plain text today — they are not JSON and carry no trace id yet, 
 they cannot be joined to Jaeger spans. Both are tracked in
 [TD-0003 §4](tech-debts/TD-0003-centralized-logging-elasticsearch-kibana.md).
 
+Elasticsearch keeps its data on a PersistentVolumeClaim, so logs and Kibana's saved objects
+survive pod restarts. If that volume is ever wiped, Kibana will not rebuild its saved objects
+by itself — restart it (`kubectl rollout restart deployment/kibana -n optimus`) and the
+`kibana-data-view` Job recreates the data view.
+
 ### Adding a New Service
 
 `mise run ingress:all` already covers Grafana, Prometheus, Jaeger, Temporal UI, Redpanda (Admin API and Console), Kong, the Platform API and the Decision Service. For anything else, thanks to dnsmasq no DNS configuration is needed — just create an Ingress rule:

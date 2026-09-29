@@ -1,6 +1,17 @@
 # Registers the Kibana data view over the index the OTel Collector writes to, so the log UI
 # is usable straight after `mise run deploy:dev` (the Grafana dashboard is provisioned the
-# same way, through a ConfigMap). Idempotent: an existing data view (HTTP 409) is a success.
+# same way, through a ConfigMap).
+#
+# Details that each cost a debugging round against Kibana 8.15.3:
+#   * Idempotency is a GET, not a create-and-fall-back: re-POSTing a data view whose *name*
+#     already exists answers 400 ("Duplicate data view: Optimus Logs"), not 409, and the update
+#     route (`POST /api/data_views/data_view/{id}`, which rejects a body carrying `id`) is a
+#     different shape again. Asking "does it exist?" first is the only stable path.
+#   * A 4xx answers non-zero on purpose, so the Job's backoff retries while Kibana is still
+#     migrating its saved-object index (it answers 400/404 then) instead of "succeeding"
+#     without a data view.
+#   * Kibana reports a 0 document count per field on a freshly created data view; that is its
+#     field sampling, not missing data — Discover queries Elasticsearch live.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -27,6 +38,8 @@ spec:
             - |
               set -eu
               KIBANA="http://kibana.optimus.svc:5601"
+              VIEW="optimus-logs"
+              BODY='{"data_view":{"id":"optimus-logs","title":"optimus-logs","name":"Optimus Logs","timeFieldName":"@timestamp"}}'
 
               ready=false
               for i in $(seq 1 60); do
@@ -42,23 +55,27 @@ spec:
                 exit 1
               fi
 
+              existing="$(curl -s -o /tmp/body -w '%{http_code}' \
+                "${KIBANA}/api/data_views/data_view/${VIEW}" -H 'kbn-xsrf: true')"
+              if [ "${existing}" = "200" ]; then
+                echo "the '${VIEW}' data view is already registered"
+                exit 0
+              fi
+
               code="$(curl -s -o /tmp/body -w '%{http_code}' \
                 -XPOST "${KIBANA}/api/data_views/data_view" \
                 -H 'kbn-xsrf: true' \
                 -H 'Content-Type: application/json' \
-                -d '{"data_view":{"id":"optimus-logs","title":"optimus-logs","name":"Optimus Logs","timeFieldName":"@timestamp"}}')"
+                -d "${BODY}")"
               cat /tmp/body 2>/dev/null || true
               echo
 
               case "${code}" in
                 200|201)
-                  echo "created the 'optimus-logs' data view (HTTP ${code})"
-                  ;;
-                409)
-                  echo "the 'optimus-logs' data view already exists (HTTP ${code})"
+                  echo "created the '${VIEW}' data view (HTTP ${code})"
                   ;;
                 *)
-                  echo "failed to create the data view (HTTP ${code})" >&2
+                  echo "could not register the data view: GET returned ${existing}, POST ${code} — retrying" >&2
                   exit 1
                   ;;
               esac

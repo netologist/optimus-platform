@@ -32,8 +32,15 @@ This change adds **Elasticsearch** (single-node, security disabled for the local
   pod identity from the log path, enriches it through the Kubernetes API and bulk-indexes into
   the `optimus-logs` index (`mapping.mode: none`, a single index).
 - `deployments/overlays/kind-dev/observability-local/kibana-data-view.yaml` — a Job that
-  registers the `Optimus Logs` data view over `optimus-logs`, so the UI is usable straight
-  after `mise run deploy:dev` (idempotent: HTTP 409 counts as success).
+  registers the `Optimus Logs` data view (`id: optimus-logs`, `timeFieldName: @timestamp`) over
+  `optimus-logs`, so the UI is usable straight after `mise run deploy:dev`. Idempotency is a
+  `GET /api/data_views/data_view/optimus-logs` first and a create only if that 404s: re-posting
+  a view whose name exists answers 400 ("Duplicate data view"), not 409, and the update route
+  (`POST /api/data_views/data_view/{id}`, which rejects a body carrying `id`) has yet another
+  shape. A 4xx exits non-zero on purpose, so the Job's backoff retries while Kibana is still
+  migrating its saved-object index instead of "succeeding" without a data view.
+  Kibana reports a 0 document count per field on a freshly created data view — that is its
+  field-sampling behaviour, not missing data: Discover queries Elasticsearch live (§3.2).
 
 The shipping path is pure infrastructure: every service already writes to stdout/stderr (Go
 stdlib `log`, Python stdlib `logging`, the operator's zap console encoder), so **no file under
@@ -129,6 +136,10 @@ was extracted from the log path (`namespace`, `pod_name`, `uid`, `container_name
 What remains unverified on this machine is the in-cluster DaemonSet reading `/var/log/pods` —
 that needs the image pull above.
 
+Kibana logs two errors that are harmless here and do not affect `status.overall=available`:
+the AI-assistant plugin asks for a Platinum license, and the remote telemetry client cannot
+reach `telemetry.elastic.co` (the same blocked egress that stops the registry).
+
 Verify the split:
 
 ```bash
@@ -139,10 +150,26 @@ kustomize build deployments/overlays/kind-ci | grep -E '^  name: (grafana|promet
 kustomize build deployments/overlays/kind-dev | grep -E '^  name: (grafana|prometheus|elasticsearch|kibana)$'
 ```
 
+### 3.2 Durability of the store
+
+`elasticsearch.yaml` mounts a 2 Gi `PersistentVolumeClaim` at `/usr/share/elasticsearch/data`
+and uses `strategy: Recreate` (the claim is ReadWriteOnce, so two pods must never race for it).
+This was learned the hard way: with no volume and a 1 Gi memory limit, the container was
+OOM-killed (exit 137) while backfilling ~30k documents, and because the data directory was the
+container filesystem that took the log index **and** Kibana's own saved-object index
+(`.kibana_8.15.3`) with it. Kibana does not rebuild its saved objects on its own — it goes
+`degraded`/`unavailable` and every `/api/data_views` call answers 400
+(`Saved object index alias [.kibana_8.15.3] not found`) until the Kibana pod is restarted.
+
+The limits are now 1 Gi request / 2 Gi limit for a 512 MB heap (a heap wants roughly twice its
+size available outside the heap), and the volume makes the state survive a pod restart:
+deleting the Elasticsearch pod kept all 919 indexed documents and the registered data view.
+
 ## 4. What remains deferred (why this is still tech debt)
 
-1. **Retention & ILM.** One index, no index lifecycle management; it grows unbounded in a
-   long-lived cluster.
+1. **Retention & ILM.** One index on a 2 Gi claim, no index lifecycle management: it grows
+   until the volume fills. `start_at: end` keeps that slow, and the volume survives pod
+   restarts (§3.2).
 2. **Auth hardening.** ES security is disabled for the local demo; a production shape would
    re-enable `xpack.security` and give the collector's exporter and Kibana credentials.
 3. **Structured logging.** Services still log prose (`log.Printf`, stdlib `logging`) and the
