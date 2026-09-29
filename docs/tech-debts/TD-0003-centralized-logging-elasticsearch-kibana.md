@@ -56,6 +56,38 @@ Cost of the split: the `kind-dev` overlay produces 12 objects more than `kind-ci
 (4 Deployments, 4 Services, 3 Grafana ConfigMaps, 1 Prometheus ConfigMap); Elasticsearch is
 the heaviest of them and is skipped entirely in CI.
 
+### 3.1 Image pull behaviour on the Kind nodes
+
+`docker.elastic.co` is reachable only **intermittently** from the Kind nodes here: TCP probes
+to the registry IP (`34.56.16.77:443`) failed in bursts (0/3 and 5/5 in two samples), and the
+kubelet reported `ErrImagePull` → `ImagePullBackOff` for the first attempts
+(`dial tcp 34.56.16.77:443: i/o timeout`).
+
+The retries do land. Without any change to this repository, the nodes pulled
+`elasticsearch:8.15.3` (511 MB, on `optimus-worker`) and `kibana:8.15.3` (423 MB, on
+`optimus-worker2`) and both pods reached `1/1 Running`. So the first `mise run deploy:dev` can
+show these two pods in `ImagePullBackOff` for a few minutes — it converges on its own, because
+the kubelet keeps retrying with backoff.
+
+The Docker daemon is **not** a better path: `docker pull` through Colima failed the same way in
+the same window, so there is no pre-pull / `kind load docker-image` step in the deploy flow.
+Should a pull ever stick, the manual nudge is:
+
+```bash
+kubectl get pods -n optimus -l app.kubernetes.io/name=elasticsearch -o wide   # which node?
+docker exec optimus-worker crictl pull docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+```
+
+Neither manifest defines a readiness probe, so `Running` alone proves nothing. Verify the stack
+functionally:
+
+```bash
+kubectl exec -n optimus deploy/elasticsearch -- curl -s localhost:9200/_cluster/health  # → "status":"green"
+kubectl exec -n optimus deploy/kibana        -- curl -s localhost:5601/api/status        # → "level":"available"
+```
+
+Measured on 2026-09-29: `es health: green | nodes: 1`, `kibana overall: available`.
+
 Verify the split:
 
 ```bash

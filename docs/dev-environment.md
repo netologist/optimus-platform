@@ -242,6 +242,8 @@ mise run ingress:all
 
 After the `mise run kind-create` or `mise run deploy:dev` command has run, the following addresses become active. Grafana, Prometheus and Kibana are deployed by the `kind-dev`-only observability overlay (`deployments/overlays/kind-dev/observability-local/`); the `kind-ci` overlay omits them, so a CI cluster serves Jaeger only.
 
+The Elasticsearch and Kibana images come from `docker.elastic.co`, which is only intermittently reachable from the Kind nodes: on the first `mise run deploy:dev` the two pods can sit in `ImagePullBackOff` for a few minutes and then converge on their own (kubelet backoff). See [TD-0003 §3.1](tech-debts/TD-0003-centralized-logging-elasticsearch-kibana.md) for the measurements and the functional verification commands.
+
 > **DNS works automatically via dnsmasq** — if the dnsmasq setup from the Requirements section has been done, there is nothing you need to add to `/etc/hosts`. The `*.optimus.local` wildcard resolves automatically to `127.0.0.1`. Adding a new service also requires zero configuration.
 
 | Service | URL | Usage |
