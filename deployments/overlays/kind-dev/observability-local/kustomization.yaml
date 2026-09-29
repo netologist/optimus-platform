@@ -17,3 +17,6 @@ resources:
   - grafana.yaml
   - elasticsearch.yaml
   - kibana.yaml
+  # Log shipping: tails the container logs and indexes them into Elasticsearch (TD-0003).
+  - otel-collector.yaml
+  - kibana-data-view.yaml

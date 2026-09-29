@@ -272,6 +272,7 @@ flowchart TB
         GrafanaServer["Grafana Dashboard Server (Port 3000)<br/>• Auto-provisioned Optimus Operations Overview (kind-dev overlay)"]
         ElasticsearchNode[("Elasticsearch (single-node)<br/>• Centralized log store (kind-dev overlay)")]
         KibanaNode["Kibana (Port 5601)<br/>• Log search & visualization (kind-dev overlay)"]
+        OTelCollectorDaemon["OTel Collector (DaemonSet)<br/>• Tails /var/log/pods on every node<br/>• Indexes into optimus-logs (kind-dev overlay)"]
 
         PlatformAPI -.-> JaegerCollector
         TWGo -.-> JaegerCollector
@@ -288,6 +289,7 @@ flowchart TB
         PrometheusCollector --> GrafanaServer
         JaegerCollector --> GrafanaServer
         ElasticsearchNode --> KibanaNode
+        OTelCollectorDaemon --> ElasticsearchNode
     end
 
     subgraph RUNNING_OPERATOR["Kubernetes Operator (Active)"]
@@ -307,7 +309,7 @@ flowchart TB
     classDef storage fill:#e2e8f0,stroke:#334155;
     classDef designed fill:#fef3c7,stroke:#d97706,stroke-dasharray: 5 5;
 
-    class TestRunner,KongEdge,PlatformAPI,TWGo,RelayWorker,AIRuntimeService,IngestWorker,DecisionSvcGo,OllayaStub,MCPCustom,SubMocks,K8sController,CRD_EnvA,CRD_IntegA,CRD_ModelA,CRD_KnowA live;
+    class TestRunner,KongEdge,PlatformAPI,TWGo,RelayWorker,AIRuntimeService,IngestWorker,DecisionSvcGo,OllayaStub,MCPCustom,SubMocks,K8sController,CRD_EnvA,CRD_IntegA,CRD_ModelA,CRD_KnowA,OTelCollectorDaemon live;
     class PostgresPrimary,RedpandaBroker,JaegerCollector,PrometheusCollector,GrafanaServer,ElasticsearchNode,KibanaNode storage;
     class CRD_PolicyA designed;
 ```
@@ -325,7 +327,7 @@ flowchart TB
 | **Observability (Tracing)** | **OpenTelemetry SDK** + **Jaeger All-in-One** | **Fully Implemented (100%)** | Active across `platform`, `decision-service`, `integration-mocks`, `ollaya`, and `ai-runtime` with W3C TraceContext propagation. Shipped to **both** overlays — it is the pillar the E2E span assertions read. |
 | **Observability (Metrics)** | **Prometheus** (v2.54) scraping `/metrics` on all services | **Fully Implemented (100%)** | Active targets: Platform API, Decision Service, Integration Mocks, Ollaya. Deployed by the `kind-dev` overlay only (`deployments/overlays/kind-dev/observability-local/`); CI does not scrape metrics. |
 | **Observability (Dashboards)** | **Grafana** (v11.2) with auto-provisioned dashboards | **Fully Implemented (100%)** | Auto-provisions Prometheus & Jaeger datasources and `Optimus - Enterprise Operations Overview` dashboard. `kind-dev` overlay only, same as Prometheus. |
-| **Observability (Logs)** | **Elasticsearch + Kibana** (ELK) for centralized log aggregation | ES + Kibana deployed in the `kind-dev` overlay; log shipping pending | Tracked in [TD-0003](docs/tech-debts/TD-0003-centralized-logging-elasticsearch-kibana.md). Store and UI are live locally; a Fluent Bit/Filebeat shipper is deferred, so no logs are ingested yet — which is why neither pod is deployed in CI. |
+| **Observability (Logs)** | **Elasticsearch + Kibana** (ELK) with an **OTel Collector** log shipper | Log shipping implemented in the `kind-dev` overlay | Tracked in [TD-0003](docs/tech-debts/TD-0003-centralized-logging-elasticsearch-kibana.md). An OTel Collector DaemonSet tails `/var/log/pods` on every node and indexes into `optimus-logs`; a Job provisions the `Optimus Logs` Kibana data view. No `projects/` change was needed — services already log to stdout/stderr. Retention/ILM, ES auth and structured (JSON, trace-correlated) logging remain deferred; none of it is in the CI cluster. |
 | **Event Streaming** | **Redpanda** (Kafka wire-compatible) + Transactional Outbox | **Fully Implemented (100%)** | `cmd/outbox-relay` polls the PostgreSQL outbox and publishes via `franz-go` with the W3C `traceparent` carried as a record header. Work orders and their `work_order.created` event are written in a single transaction, so the event cannot diverge from the row. |
 | **Agent Telemetry** | **NATS Core** for live ephemeral agent thinking streams | Architectural Design Complete | Designed in ADR-0006; scheduled for Phase 9 live operations dashboard. |
 | **Kubernetes Operator** | Reconciles `EnterpriseEnvironment`, `EnterpriseIntegration`, `DecisionModel`, `DecisionPolicy`, `EnterpriseKnowledgeSource` | Four CRDs implemented, a fifth (`DecisionPolicy`) designed | Four CRDs have Kubebuilder controllers, CRD YAMLs, sample manifests and envtest unit tests: `EnterpriseEnvironment`, `EnterpriseIntegration`, `DecisionModel`, `EnterpriseKnowledgeSource`. `DecisionPolicy` is currently **type-only**: the CRD (`platform.optimus.dev_decisionpolicies.yaml`) is installed, the Go type exists and tenant CRs apply (`deployments/tenants/acme/policy.yaml` — live, but with an empty `status.phase`), yet no reconciler is registered in `cmd/main.go` — see `projects/operator/README.md` §5. |

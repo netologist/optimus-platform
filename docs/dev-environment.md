@@ -251,6 +251,7 @@ The Elasticsearch and Kibana images come from `docker.elastic.co`, which is only
 | **Grafana** | https://grafana.optimus.local | admin / admin |
 | **Prometheus** | https://prometheus.optimus.local | Metric queries |
 | **Jaeger** | https://jaeger.optimus.local | Distributed trace viewing |
+| **Kibana** | https://kibana.optimus.local | Log search — the `Optimus Logs` data view is provisioned automatically |
 | **Temporal UI** | https://temporal.optimus.local | Workflow runs, history and the waiting approval signal |
 | **Redpanda Admin** | https://redpanda.optimus.local | Kafka admin API |
 | **Redpanda Console** | https://redpanda-console.optimus.local | Topics, consumer groups and the events the outbox relay published |
@@ -259,6 +260,28 @@ The Elasticsearch and Kibana images come from `docker.elastic.co`, which is only
 | **Decision Service** | https://decision.optimus.local | Decision service |
 
 TLS certificates are stored under `~/.kind-certs/`. The `mkcert` CA is added to the login keychain.
+
+### Logs (`optimus-logs`)
+
+Every container's stdout/stderr is tailed by the `otel-collector` DaemonSet and indexed into
+the `optimus-logs` index in Elasticsearch; a Job provisions the matching `Optimus Logs` data
+view in Kibana, so this works without any manual setup:
+
+```bash
+# Kibana → Analytics → Discover → "Optimus Logs"
+# or query the index directly:
+kubectl exec -n optimus deploy/elasticsearch -- \
+  curl -s 'localhost:9200/optimus-logs/_count'
+```
+
+Documents carry the container message plus the pod identity
+(`Resource.k8s.namespace.name`, `Resource.k8s.pod.name`, `Resource.k8s.container.name`,
+`Resource.app`, `Attributes.log.iostream`), so a useful Kibana query is
+`Resource.k8s.namespace.name: "optimus" and Resource.k8s.pod.name: "platform-*"`.
+
+Log lines are plain text today — they are not JSON and carry no trace id yet, which is why
+they cannot be joined to Jaeger spans. Both are tracked in
+[TD-0003 §4](tech-debts/TD-0003-centralized-logging-elasticsearch-kibana.md).
 
 ### Adding a New Service
 

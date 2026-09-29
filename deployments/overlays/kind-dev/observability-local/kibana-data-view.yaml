@@ -1,0 +1,64 @@
+# Registers the Kibana data view over the index the OTel Collector writes to, so the log UI
+# is usable straight after `mise run deploy:dev` (the Grafana dashboard is provisioned the
+# same way, through a ConfigMap). Idempotent: an existing data view (HTTP 409) is a success.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kibana-data-view
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: kibana
+    app.kubernetes.io/component: data-view
+spec:
+  backoffLimit: 8
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kibana
+        app.kubernetes.io/component: data-view
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: create-data-view
+          image: curlimages/curl:8.10.1
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              KIBANA="http://kibana.optimus.svc:5601"
+
+              ready=false
+              for i in $(seq 1 60); do
+                if curl -fsS --max-time 5 "${KIBANA}/api/status" >/dev/null 2>&1; then
+                  ready=true
+                  break
+                fi
+                echo "waiting for Kibana (${i}/60)..."
+                sleep 5
+              done
+              if [ "${ready}" != true ]; then
+                echo "Kibana never became reachable at ${KIBANA}" >&2
+                exit 1
+              fi
+
+              code="$(curl -s -o /tmp/body -w '%{http_code}' \
+                -XPOST "${KIBANA}/api/data_views/data_view" \
+                -H 'kbn-xsrf: true' \
+                -H 'Content-Type: application/json' \
+                -d '{"data_view":{"id":"optimus-logs","title":"optimus-logs","name":"Optimus Logs","timeFieldName":"@timestamp"}}')"
+              cat /tmp/body 2>/dev/null || true
+              echo
+
+              case "${code}" in
+                200|201)
+                  echo "created the 'optimus-logs' data view (HTTP ${code})"
+                  ;;
+                409)
+                  echo "the 'optimus-logs' data view already exists (HTTP ${code})"
+                  ;;
+                *)
+                  echo "failed to create the data view (HTTP ${code})" >&2
+                  exit 1
+                  ;;
+              esac

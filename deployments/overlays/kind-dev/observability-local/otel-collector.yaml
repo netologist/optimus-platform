@@ -1,0 +1,182 @@
+# OTel Collector (DaemonSet) — ships every container's stdout/stderr into Elasticsearch.
+#
+# This is the log-shipping half of TD-0003, and it is a pure infrastructure concern: the
+# services already log to stdout/stderr (Go stdlib `log`, Python stdlib `logging`, the
+# operator's zap console encoder), so nothing in projects/ has to change. The DaemonSet tails
+# /var/log/pods on the node, recovers the pod identity from the log path, enriches it with the
+# Kubernetes API, and bulk-indexes into `optimus-logs`.
+#
+# Part of the kind-dev-only observability overlay — see TD-0003.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: otel-collector
+data:
+  config.yaml: |
+    receivers:
+      filelog:
+        include:
+          - /var/log/pods/*/*/*.log
+        exclude:
+          # Do not re-ingest the collector's own logs.
+          - /var/log/pods/optimus_otel-collector-*_*/*/*.log
+        # Tail new lines only: `beginning` would also replay rotated/truncated files, which
+        # shows up as "failed to detect a valid container log format" on files that start
+        # with NUL padding. The Elasticsearch index keeps whatever was already shipped.
+        start_at: end
+        include_file_path: true
+        include_file_name: false
+        operators:
+          # Parses the CRI log envelope (`<time> <stream> <flag> <message>`), so the message
+          # body itself is what gets indexed.
+          - type: container
+            id: parser-container
+            output: extract-metadata-from-path
+          # Recovers the pod identity from the path the container runtime writes to:
+          # /var/log/pods/<namespace>_<pod>_<uid>/<container>/<restart>.log
+          - type: regex_parser
+            id: extract-metadata-from-path
+            parse_from: attributes["log.file.path"]
+            parse_to: resource
+            regex: ^/var/log/pods/(?P<namespace>[^_]+)_(?P<pod_name>[^_]+)_(?P<uid>[^/]+)/(?P<container_name>[^/]+)/(?P<restart_count>\d+)\.log$
+    processors:
+      memory_limiter:
+        check_interval: 5s
+        limit_percentage: 70
+        spike_limit_percentage: 20
+      k8sattributes:
+        auth_type: serviceAccount
+        extract:
+          metadata:
+            - k8s.namespace.name
+            - k8s.pod.name
+            - k8s.pod.uid
+            - k8s.node.name
+            - k8s.container.name
+          labels:
+            - tag_name: app
+              key: app.kubernetes.io/name
+              from: pod
+        pod_association:
+          - sources:
+              - from: resource_attribute
+                name: uid
+      batch:
+        send_batch_size: 512
+        timeout: 5s
+    exporters:
+      elasticsearch:
+        endpoints:
+          - http://elasticsearch.optimus.svc:9200
+        logs_index: optimus-logs
+        # `none` keeps the exporter from installing its own index templates; a local demo
+        # wants the documents as they are (TD-0003 tracks ILM/retention as deferred).
+        mapping:
+          mode: none
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+    service:
+      extensions: [health_check]
+      telemetry:
+        logs:
+          level: info
+      pipelines:
+        logs:
+          receivers: [filelog]
+          processors: [memory_limiter, k8sattributes, batch]
+          exporters: [elasticsearch]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: otel-collector
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: otel-collector
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: otel-collector
+  labels:
+    app.kubernetes.io/name: otel-collector
+rules:
+  # The metadata enrichment reads pod/resource identity through the API.
+  - apiGroups: [""]
+    resources: ["pods", "namespaces", "nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets", "deployments", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: otel-collector
+  labels:
+    app.kubernetes.io/name: otel-collector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: otel-collector
+subjects:
+  - kind: ServiceAccount
+    name: otel-collector
+    namespace: optimus
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: otel-collector
+  namespace: optimus
+  labels:
+    app.kubernetes.io/name: otel-collector
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: otel-collector
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: otel-collector
+    spec:
+      serviceAccountName: otel-collector
+      containers:
+        - name: collector
+          image: otel/opentelemetry-collector-contrib:0.111.0
+          args:
+            - "--config=/conf/config.yaml"
+          ports:
+            - name: health
+              containerPort: 13133
+          readinessProbe:
+            httpGet:
+              path: /
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /conf
+            - name: varlogpods
+              mountPath: /var/log/pods
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+        - name: varlogpods
+          hostPath:
+            path: /var/log/pods
+            type: Directory
