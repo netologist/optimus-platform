@@ -96,7 +96,7 @@ run = "./scripts/seed.sh"
 description = "Install Kubernetes Operator CRDs"
 run = "kubectl apply -k projects/operator/config/crd"
 [tasks.test]
-description = "Run fast tests across all projects (no Kind required)"
+description = "Run fast tests across all projects (including architecture fitness tests)"
 run = """
   for p in platform decision-service integration-mocks operator; do
     echo "==> Testing projects/$p..."
@@ -107,6 +107,22 @@ run = """
     (cd projects/ai-runtime && uv run pytest -v) || exit 1
   fi
 """
+
+[tasks."test:arch"]
+description = "Run architecture boundary tests across Go and Python runtimes"
+run = """
+  echo "==> Running Architecture Fitness Tests..."
+  (cd projects/platform && go test -v ./test/arch/...) || exit 1
+  (cd projects/operator && go test -v ./test/arch/...) || exit 1
+  if [ -d "projects/ai-runtime" ]; then
+    (cd projects/ai-runtime && uv run pytest tests/test_architecture.py) || exit 1
+  fi
+  echo "✅ All architectural boundary invariants passed."
+"""
+
+[tasks."test:mutation"]
+description = "Run targeted mutation tests on core decision and agent logic"
+run = "./scripts/test-mutation.sh"
 
 [tasks.lint]
 description = "Run linters across all projects"

@@ -42,6 +42,17 @@ jobs:
             (cd projects/$p && golangci-lint run ./... --timeout=5m) || exit 1
           done
 
+      - name: Run Architecture Fitness Tests (ADR-0008)
+        run: |
+          echo "==> Running Architecture Boundary Checks..."
+          (cd projects/platform && go test -v ./test/arch/...)
+          (cd projects/operator && go test -v ./test/arch/...)
+          if [ -d "projects/ai-runtime" ]; then
+            cd projects/ai-runtime
+            uv sync --dev || true
+            uv run pytest -v tests/test_architecture.py
+          fi
+
       - name: Run Go Unit Tests
         run: |
           for p in platform decision-service integration-mocks operator; do
@@ -49,6 +60,10 @@ jobs:
             (cd projects/$p && go test -race -v ./...)
           done
           (cd e2e && go test -race -v ./suite/...)
+
+      - name: Run Targeted Mutation Tests (ADR-0008)
+        run: |
+          ./scripts/test-mutation.sh go
 
       - name: Run Python Lint & Tests
         run: |
