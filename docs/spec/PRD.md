@@ -307,7 +307,6 @@ use (
 optimus/
 ├── README.md
 ├── AGENTS.md                      # assistant operating contract + architecture reference (see §15)
-├── PRD.md                         # this document
 ├── .mise.toml
 ├── .editorconfig
 ├── .gitignore
@@ -461,6 +460,7 @@ optimus/
 │   └── cleanup.sh
 │
 └── docs/
+    ├── spec/{PRD,PLAN,CONTEXT}.md # this PRD + the master plan + domain glossary
     ├── architecture/{context,containers,components,deployment}.md
     ├── decisions/                  # ADRs — see §13
     ├── crds/{enterprise-environment,enterprise-integration,decision-model}.md

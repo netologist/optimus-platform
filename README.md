@@ -524,7 +524,7 @@ Full details, including dnsmasq troubleshooting and certificate internals, are i
 ## 6. Architecture Decision Records (ADRs) & Specs
 
 All architectural boundaries and trade-offs are rigorously documented:
-- [`PRD.md`](PRD.md): Product Requirements Document and operating specifications.
+- [`docs/spec/PRD.md`](docs/spec/PRD.md): Product Requirements Document and operating specifications.
 - [`AGENTS.md`](AGENTS.md): Repository conventions, architectural boundaries, and commands.
 - [`docs/adr/`](docs/adr/): Architecture Decision Records covering Hybrid RAG, MCP Adapters, Decision Policies, Dual Messaging (Redpanda/NATS), and Multi-Tenant Isolation.
 - [`docs/stories/`](docs/stories/): Detailed story specifications and Gherkin acceptance criteria.

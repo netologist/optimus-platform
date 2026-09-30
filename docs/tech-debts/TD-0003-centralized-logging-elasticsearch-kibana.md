@@ -206,6 +206,6 @@ into the base.
 
 ## 6. References & Related Documents
 
-- [PRD.md §3](../../PRD.md) — Observability stack
+- [PRD.md §3](../../spec/PRD.md) — Observability stack
 - [`deployments/overlays/kind-dev/observability-local/`](../../deployments/overlays/kind-dev/observability-local/)
 - [README §5.4](../../README.md) — Local TLS service URLs

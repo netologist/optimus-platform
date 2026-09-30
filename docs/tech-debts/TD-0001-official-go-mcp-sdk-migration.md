@@ -52,6 +52,6 @@ import "github.com/modelcontextprotocol/go-sdk/mcp"
 
 ## 4. References & Related Documents
 
-- [PRD.md §6.3, §11.3](../../PRD.md) — Monorepo Architecture & MCP Manifests
+- [PRD.md §6.3, §11.3](../../spec/PRD.md) — Monorepo Architecture & MCP Manifests
 - [ADR-0004: Dedicated MCP Adapters for Enterprise S2S Integrations](../adr/0004-dedicated-mcp-adapters-for-enterprise-s2s-integrations.md)
 - [`projects/integration-mocks/README.md`](../../projects/integration-mocks/README.md)
